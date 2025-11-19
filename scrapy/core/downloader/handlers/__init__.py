@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import TYPE_CHECKING, Any, Protocol, cast
-
-from twisted.internet import defer
 
 from scrapy import Request, Spider, signals
 from scrapy.exceptions import NotConfigured, NotSupported
@@ -15,9 +14,7 @@ from scrapy.utils.misc import build_from_crawler, load_object
 from scrapy.utils.python import without_none_values
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Generator
-
-    from twisted.internet.defer import Deferred
+    from collections.abc import Callable
 
     from scrapy.crawler import Crawler
     from scrapy.http import Response
@@ -29,7 +26,7 @@ logger = logging.getLogger(__name__)
 class DownloadHandlerProtocol(Protocol):
     def download_request(
         self, request: Request, spider: Spider
-    ) -> Deferred[Response]: ...
+    ) -> asyncio.Future[Response]: ...
 
 
 class DownloadHandlers:
@@ -97,7 +94,7 @@ class DownloadHandlers:
     @_warn_spider_arg
     def download_request(
         self, request: Request, spider: Spider | None = None
-    ) -> Deferred[Response]:
+    ) -> asyncio.Future[Response]:
         scheme = urlparse_cached(request).scheme
         handler = self._get_handler(scheme)
         if not handler:
@@ -107,8 +104,7 @@ class DownloadHandlers:
         assert self._crawler.spider
         return handler.download_request(request, self._crawler.spider)
 
-    @defer.inlineCallbacks
-    def _close(self, *_a: Any, **_kw: Any) -> Generator[Deferred[Any], Any, None]:
+    async def _close(self, *_a: Any, **_kw: Any) -> None:
         for dh in self._handlers.values():
             if hasattr(dh, "close"):
-                yield dh.close()
+                await dh.close()
