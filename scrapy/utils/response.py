@@ -9,10 +9,10 @@ import os
 import re
 import tempfile
 import webbrowser
+from http import HTTPStatus
 from typing import TYPE_CHECKING, Any
 from weakref import WeakKeyDictionary
 
-from twisted.web import http
 from w3lib import html
 
 from scrapy.utils.python import to_bytes, to_unicode
@@ -23,6 +23,9 @@ if TYPE_CHECKING:
     from scrapy.http import Response, TextResponse
 
 _baseurl_cache: WeakKeyDictionary[Response, str] = WeakKeyDictionary()
+
+# Create a mapping compatible with Twisted's http.RESPONSES
+_HTTP_RESPONSES = {s.value: s.phrase.encode('latin1') for s in HTTPStatus}
 
 
 def get_base_url(response: TextResponse) -> str:
@@ -56,7 +59,7 @@ def get_meta_refresh(
 def response_status_message(status: bytes | float | str) -> str:
     """Return status code plus status text descriptive message"""
     status_int = int(status)
-    message = http.RESPONSES.get(status_int, "Unknown Status")
+    message = _HTTP_RESPONSES.get(status_int, b"Unknown Status")
     return f"{status_int} {to_unicode(message)}"
 
 
