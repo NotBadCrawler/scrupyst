@@ -6,6 +6,7 @@ See documentation in docs/topics/spider-middleware.rst
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from collections.abc import AsyncIterator, Callable, Coroutine, Iterable
 from functools import wraps
@@ -14,9 +15,6 @@ from itertools import islice
 from typing import TYPE_CHECKING, Any, TypeAlias, TypeVar, cast
 from warnings import warn
 
-from twisted.internet.defer import Deferred, inlineCallbacks
-from twisted.python.failure import Failure
-
 from scrapy import Request, Spider
 from scrapy.exceptions import ScrapyDeprecationWarning, _InvalidOutput
 from scrapy.http import Response
@@ -24,6 +22,7 @@ from scrapy.middleware import MiddlewareManager
 from scrapy.utils.asyncgen import as_async_generator, collect_asyncgen
 from scrapy.utils.conf import build_component_list
 from scrapy.utils.defer import (
+    Failure,
     _defer_sleep_async,
     deferred_from_coro,
     maybe_deferred_to_future,
@@ -234,15 +233,19 @@ class SpiderMiddlewareManager(MiddlewareManager):
             if _isiterable(result):
                 # stop exception handling by handing control over to the
                 # process_spider_output chain if an iterable has been returned
-                dfd: Deferred[MutableChain[_T] | MutableAsyncChain[_T]] = (
-                    self._process_spider_output(response, result, method_index + 1)
-                )
-                # _process_spider_output() returns a Deferred only because of downgrading so this can be
+                
+                # Since _process_spider_output is now async, we need to call it 
+                # and check if downgrading occurred by wrapping in a task
+                import asyncio
+                coro = self._process_spider_output(response, result, method_index + 1)
+                future = asyncio.ensure_future(coro)
+                
+                # _process_spider_output() returns a Future only because of downgrading so this can be
                 # simplified when downgrading is removed.
-                if dfd.called:
+                if future.done():
                     # the result is available immediately if _process_spider_output didn't do downgrading
-                    return cast("MutableChain[_T] | MutableAsyncChain[_T]", dfd.result)
-                # we forbid waiting here because otherwise we would need to return a deferred from
+                    return cast("MutableChain[_T] | MutableAsyncChain[_T]", future.result())
+                # we forbid waiting here because otherwise we would need to return a future from
                 # _process_spider_exception too, which complicates the architecture
                 msg = f"Async iterable returned from {global_object_name(method)} cannot be downgraded"
                 raise _InvalidOutput(msg)
@@ -255,16 +258,15 @@ class SpiderMiddlewareManager(MiddlewareManager):
             raise _InvalidOutput(msg)
         raise exception
 
-    # This method cannot be made async def, as _process_spider_exception relies on the Deferred result
+    # This method cannot be made async def, as _process_spider_exception relies on the Future result
     # being available immediately which doesn't work when it's a wrapped coroutine.
-    # It also needs @inlineCallbacks only because of downgrading so it can be removed when downgrading is removed.
-    @inlineCallbacks
-    def _process_spider_output(
+    # It also needs async only because of downgrading so it can be simplified when downgrading is removed.
+    async def _process_spider_output(
         self,
         response: Response,
         result: Iterable[_T] | AsyncIterator[_T],
         start_index: int = 0,
-    ) -> Generator[Deferred[Any], Any, MutableChain[_T] | MutableAsyncChain[_T]]:
+    ) -> MutableChain[_T] | MutableAsyncChain[_T]:
         # items in this iterable do not need to go through the process_spider_output
         # chain, they went through it already from the process_spider_exception method
         recovered: MutableChain[_T] | MutableAsyncChain[_T]
@@ -307,11 +309,9 @@ class SpiderMiddlewareManager(MiddlewareManager):
                     )
                     assert isinstance(result, AsyncIterator)
                     # AsyncIterator -> Iterable
-                    result = yield deferred_from_coro(collect_asyncgen(result))
+                    result = await collect_asyncgen(result)
                     if isinstance(recovered, AsyncIterator):
-                        recovered_collected = yield deferred_from_coro(
-                            collect_asyncgen(recovered)
-                        )
+                        recovered_collected = await collect_asyncgen(recovered)
                         recovered = MutableChain(recovered_collected)
                 # might fail directly if the output value is not a generator
                 if method in self._mw_methods_requiring_spider:
@@ -361,12 +361,7 @@ class SpiderMiddlewareManager(MiddlewareManager):
         else:
             recovered = MutableChain()
         result = self._evaluate_iterable(response, result, 0, recovered)
-        result = await maybe_deferred_to_future(
-            cast(
-                "Deferred[Iterable[_T] | AsyncIterator[_T]]",
-                self._process_spider_output(response, result),
-            )
-        )
+        result = await self._process_spider_output(response, result)
         if isinstance(result, AsyncIterator):
             return MutableAsyncChain(result, recovered)
         if isinstance(recovered, AsyncIterator):
@@ -378,12 +373,12 @@ class SpiderMiddlewareManager(MiddlewareManager):
         self,
         scrape_func: Callable[
             [Response | Failure, Request],
-            Deferred[Iterable[_T] | AsyncIterator[_T]],
+            asyncio.Future[Iterable[_T] | AsyncIterator[_T]],
         ],
         response: Response,
         request: Request,
         spider: Spider,
-    ) -> Deferred[MutableChain[_T] | MutableAsyncChain[_T]]:
+    ) -> asyncio.Future[MutableChain[_T] | MutableAsyncChain[_T]]:
         warn(
             "SpiderMiddlewareManager.scrape_response() is deprecated, use scrape_response_async() instead",
             ScrapyDeprecationWarning,

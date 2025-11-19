@@ -24,6 +24,47 @@ _P = ParamSpec("_P")
 _DEFER_DELAY = 0.1
 
 
+class Failure:
+    """A simple wrapper for exceptions, replacing twisted.python.failure.Failure.
+    
+    This class provides a compatible interface for error handling in asyncio,
+    wrapping exceptions with .value and .check() methods.
+    """
+    
+    def __init__(self, exc_value: BaseException | None = None, exc_type: type[BaseException] | None = None):
+        """Initialize a Failure with an exception.
+        
+        Args:
+            exc_value: The exception instance
+            exc_type: The exception type (optional, inferred from exc_value if not provided)
+        """
+        if exc_value is None:
+            import sys
+            exc_value = sys.exc_info()[1]
+            if exc_value is None:
+                raise ValueError("Failure() with no exception")
+        
+        self.value: BaseException = exc_value
+        self.type: type[BaseException] = exc_type or type(exc_value)
+    
+    def check(self, *exc_types: type[BaseException]) -> type[BaseException] | None:
+        """Check if this failure's exception matches any of the given exception types.
+        
+        Args:
+            *exc_types: Exception types to check against
+            
+        Returns:
+            The exception type if it matches, None otherwise
+        """
+        for exc_type in exc_types:
+            if isinstance(self.value, exc_type):
+                return self.type
+        return None
+    
+    def __repr__(self) -> str:
+        return f"Failure({self.type.__name__}: {self.value})"
+
+
 async def _defer_sleep() -> None:
     """Delay by _DEFER_DELAY so event loop has a chance to process pending tasks.
 

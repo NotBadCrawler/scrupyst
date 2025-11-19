@@ -14,9 +14,6 @@ from time import time
 from traceback import format_exc
 from typing import TYPE_CHECKING, Any
 
-from twisted.internet.defer import CancelledError, Deferred, inlineCallbacks
-from twisted.python.failure import Failure
-
 from scrapy import signals
 from scrapy.core.scheduler import BaseScheduler
 from scrapy.core.scraper import Scraper
@@ -33,6 +30,7 @@ from scrapy.utils.asyncio import (
     is_asyncio_available,
 )
 from scrapy.utils.defer import (
+    Failure,
     _schedule_coro,
     deferred_from_coro,
     ensure_awaitable,
@@ -46,8 +44,6 @@ from scrapy.utils.reactor import CallLaterOnce
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Callable, Coroutine, Generator
-
-    from twisted.internet.task import LoopingCall
 
     from scrapy.core.downloader import Downloader
     from scrapy.crawler import Crawler
@@ -67,12 +63,12 @@ class _Slot:
         nextcall: CallLaterOnce[None],
         scheduler: BaseScheduler,
     ) -> None:
-        self.closing: Deferred[None] | None = None
+        self.closing: asyncio.Future[None] | None = None
         self.inprogress: set[Request] = set()
         self.close_if_idle: bool = close_if_idle
         self.nextcall: CallLaterOnce[None] = nextcall
         self.scheduler: BaseScheduler = scheduler
-        self.heartbeat: AsyncioLoopingCall | LoopingCall = create_looping_call(
+        self.heartbeat: AsyncioLoopingCall = create_looping_call(
             nextcall.schedule
         )
 
@@ -84,9 +80,9 @@ class _Slot:
         self._maybe_fire_closing()
 
     async def close(self) -> None:
-        self.closing = Deferred()
+        self.closing = asyncio.Future()
         self._maybe_fire_closing()
-        await maybe_deferred_to_future(self.closing)
+        await self.closing
 
     def _maybe_fire_closing(self) -> None:
         if self.closing is not None and not self.inprogress:
@@ -94,7 +90,8 @@ class _Slot:
                 self.nextcall.cancel()
                 if self.heartbeat.running:
                     self.heartbeat.stop()
-            self.closing.callback(None)
+            if not self.closing.done():
+                self.closing.set_result(None)
 
 
 class ExecutionEngine:
@@ -104,7 +101,7 @@ class ExecutionEngine:
         self,
         crawler: Crawler,
         spider_closed_callback: Callable[
-            [Spider], Coroutine[Any, Any, None] | Deferred[None] | None
+            [Spider], Coroutine[Any, Any, None] | asyncio.Future[None] | None
         ],
     ) -> None:
         self.crawler: Crawler = crawler
@@ -117,13 +114,13 @@ class ExecutionEngine:
         self.running: bool = False
         self.paused: bool = False
         self._spider_closed_callback: Callable[
-            [Spider], Coroutine[Any, Any, None] | Deferred[None] | None
+            [Spider], Coroutine[Any, Any, None] | asyncio.Future[None] | None
         ] = spider_closed_callback
         self.start_time: float | None = None
         self._start: AsyncIterator[Any] | None = None
-        self._closewait: Deferred[None] | None = None
+        self._closewait: asyncio.Future[None] | None = None
         self._start_request_processing_awaitable: (
-            asyncio.Future[None] | Deferred[None] | None
+            asyncio.Future[None] | None
         ) = None
         downloader_cls: type[Downloader] = load_object(self.settings["DOWNLOADER"])
         try:
@@ -340,43 +337,47 @@ class ExecutionEngine:
             self.signals.send_catch_log(signals.scheduler_empty)
             return False
 
-        d: Deferred[Response | Request] = self._download(request)
-        d.addBoth(self._handle_downloader_output, request)
-        d.addErrback(
-            lambda f: logger.info(
-                "Error while handling downloader output",
-                exc_info=failure_to_exc_info(f),
-                extra={"spider": self.spider},
-            )
-        )
-
-        def _remove_request(_: Any) -> None:
-            assert self._slot
-            self._slot.remove_request(request)
-
-        d2: Deferred[None] = d.addBoth(_remove_request)
-        d2.addErrback(
-            lambda f: logger.info(
-                "Error while removing request from slot",
-                exc_info=failure_to_exc_info(f),
-                extra={"spider": self.spider},
-            )
-        )
-        slot = self._slot
-        d2.addBoth(lambda _: slot.nextcall.schedule())
-        d2.addErrback(
-            lambda f: logger.info(
-                "Error while scheduling new request",
-                exc_info=failure_to_exc_info(f),
-                extra={"spider": self.spider},
-            )
-        )
+        # Schedule the download and handling as an async task
+        _schedule_coro(self._process_scheduled_request(request))
         return True
 
-    @inlineCallbacks
-    def _handle_downloader_output(
+    async def _process_scheduled_request(self, request: Request) -> None:
+        """Process a scheduled request through download and scraping."""
+        assert self._slot is not None
+        assert self.spider is not None
+        slot = self._slot
+        
+        try:
+            result = await self._download_async(request)
+            await self._handle_downloader_output_async(result, request)
+        except Exception as e:
+            logger.info(
+                "Error while handling downloader output",
+                exc_info=True,
+                extra={"spider": self.spider},
+            )
+        
+        try:
+            self._slot.remove_request(request)
+        except Exception as e:
+            logger.info(
+                "Error while removing request from slot",
+                exc_info=True,
+                extra={"spider": self.spider},
+            )
+        
+        try:
+            slot.nextcall.schedule()
+        except Exception as e:
+            logger.info(
+                "Error while scheduling new request",
+                exc_info=True,
+                extra={"spider": self.spider},
+            )
+
+    async def _handle_downloader_output_async(
         self, result: Request | Response | Failure, request: Request
-    ) -> Generator[Deferred[Any], Any, None]:
+    ) -> None:
         if not isinstance(result, (Request, Response, Failure)):
             raise TypeError(
                 f"Incorrect type: expected Request, Response or Failure, got {type(result)}: {result!r}"
@@ -388,7 +389,7 @@ class ExecutionEngine:
             return
 
         try:
-            yield self.scraper.enqueue_scrape(result, request)
+            await maybe_deferred_to_future(self.scraper.enqueue_scrape(result, request))
         except Exception:
             assert self.spider is not None
             logger.error(
@@ -449,9 +450,7 @@ class ExecutionEngine:
         if self.spider is None:
             raise RuntimeError(f"No open spider to crawl: {request}")
         try:
-            response_or_request = await maybe_deferred_to_future(
-                self._download(request)
-            )
+            response_or_request = await self._download_async(request)
         finally:
             assert self._slot is not None
             self._slot.remove_request(request)
@@ -459,10 +458,10 @@ class ExecutionEngine:
             return await self.download_async(response_or_request)
         return response_or_request
 
-    @inlineCallbacks
-    def _download(
+
+    async def _download_async(
         self, request: Request
-    ) -> Generator[Deferred[Any], Any, Response | Request]:
+    ) -> Response | Request:
         assert self._slot is not None  # typing
         assert self.spider is not None
 
@@ -470,9 +469,9 @@ class ExecutionEngine:
         try:
             result: Response | Request
             if self._downloader_fetch_needs_spider:
-                result = yield self.downloader.fetch(request, self.spider)
+                result = await maybe_deferred_to_future(self.downloader.fetch(request, self.spider))
             else:
-                result = yield self.downloader.fetch(request)
+                result = await maybe_deferred_to_future(self.downloader.fetch(request))
             if not isinstance(result, (Response, Request)):
                 raise TypeError(
                     f"Incorrect type: expected Response or Request, got {type(result)}: {result!r}"
