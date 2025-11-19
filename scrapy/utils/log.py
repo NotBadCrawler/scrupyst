@@ -1,15 +1,12 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 import pprint
 import sys
 from collections.abc import MutableMapping
 from logging.config import dictConfig
-from typing import TYPE_CHECKING, Any, cast
-
-from twisted.internet import asyncioreactor
-from twisted.python import log as twisted_log
-from twisted.python.failure import Failure
+from typing import TYPE_CHECKING, Any
 
 import scrapy
 from scrapy.settings import Settings, _SettingsKey
@@ -26,18 +23,14 @@ logger = logging.getLogger(__name__)
 
 
 def failure_to_exc_info(
-    failure: Failure,
-) -> tuple[type[BaseException], BaseException, TracebackType | None] | None:
-    """Extract exc_info from Failure instances"""
-    if isinstance(failure, Failure):
-        assert failure.type
-        assert failure.value
-        return (
-            failure.type,
-            failure.value,
-            cast("TracebackType | None", failure.getTracebackObject()),
-        )
-    return None
+    exception: BaseException,
+) -> tuple[type[BaseException], BaseException, TracebackType | None]:
+    """Extract exc_info from exception instances"""
+    return (
+        type(exception),
+        exception,
+        exception.__traceback__,
+    )
 
 
 class TopLevelFormatter(logging.Filter):
@@ -75,7 +68,7 @@ DEFAULT_LOGGING = {
         "scrapy": {
             "level": "DEBUG",
         },
-        "twisted": {
+        "asyncio": {
             "level": "ERROR",
         },
     },
@@ -99,8 +92,8 @@ def configure_logging(
 
     This function does:
 
-    - Route warnings and twisted logging through Python standard logging
-    - Assign DEBUG and ERROR level to Scrapy and Twisted loggers respectively
+    - Route warnings through Python standard logging
+    - Assign DEBUG and ERROR level to Scrapy and asyncio loggers respectively
     - Route stdout to log if LOG_STDOUT setting is True
 
     When ``install_root_handler`` is True (default), this function also
@@ -112,9 +105,6 @@ def configure_logging(
     if not sys.warnoptions:
         # Route warnings through python logging
         logging.captureWarnings(True)
-
-    observer = twisted_log.PythonLoggingObserver("twisted")
-    observer.start()
 
     dictConfig(DEFAULT_LOGGING)
 
@@ -191,15 +181,17 @@ def log_scrapy_info(settings: Settings) -> None:
 
 
 def log_reactor_info() -> None:
-    from twisted.internet import reactor
-
-    logger.debug("Using reactor: %s.%s", reactor.__module__, reactor.__class__.__name__)
-    if isinstance(reactor, asyncioreactor.AsyncioSelectorReactor):
-        logger.debug(
-            "Using asyncio event loop: %s.%s",
-            reactor._asyncioEventloop.__module__,
-            reactor._asyncioEventloop.__class__.__name__,
-        )
+    try:
+        loop = asyncio.get_running_loop()
+        logger.debug("Using asyncio event loop: %s.%s", 
+                    loop.__module__, loop.__class__.__name__)
+    except RuntimeError:
+        try:
+            loop = asyncio.get_event_loop()
+            logger.debug("Using asyncio event loop: %s.%s", 
+                        loop.__module__, loop.__class__.__name__)
+        except RuntimeError:
+            logger.debug("No asyncio event loop available")
 
 
 class StreamLogger:

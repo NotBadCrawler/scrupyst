@@ -1,10 +1,10 @@
+import asyncio
 import datetime
 import decimal
 import json
 from typing import Any
 
 from itemadapter import ItemAdapter, is_item
-from twisted.internet import defer
 
 from scrapy.http import Request, Response
 
@@ -24,7 +24,7 @@ class ScrapyJSONEncoder(json.JSONEncoder):
             return o.strftime(self.TIME_FORMAT)
         if isinstance(o, decimal.Decimal):
             return str(o)
-        if isinstance(o, defer.Deferred):
+        if isinstance(o, (asyncio.Future, asyncio.Task)):
             return str(o)
         if isinstance(o, Request):
             return f"<{type(o).__name__} {o.method} {o.url}>"

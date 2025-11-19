@@ -7,25 +7,22 @@ name = "Scrapy"
 dynamic = ["version"]
 description = "A high-level Web Crawling and Web Scraping framework"
 dependencies = [
-    # Twisted pinned until Scrapy is updated for its internal TLS API changes
-    "Twisted>=21.7.0,<=25.5.0",
-    "cryptography>=37.0.0",
-    "cssselect>=0.9.1",
+    # HTTP client for asyncio
+    "aiohttp>=3.11.11",
+    "cryptography>=44.0.0",
+    "cssselect>=1.2.0",
     "defusedxml>=0.7.1",
-    "itemadapter>=0.1.0",
-    "itemloaders>=1.0.1",
-    "lxml>=4.6.4",
+    "itemadapter>=0.10.0",
+    "itemloaders>=1.3.2",
+    "lxml>=5.3.0",
     "packaging",
-    "parsel>=1.5.0",
-    "protego>=0.1.15",
-    "pyOpenSSL>=22.0.0",
-    "queuelib>=1.4.2",
-    "service_identity>=18.1.0",
+    "parsel>=1.10.0",
+    "protego>=0.5.0",
+    "queuelib>=1.8.0",
     "tldextract",
-    "w3lib>=1.17.0",
-    "zope.interface>=5.1.0",
+    "w3lib>=2.3.0",
     # Platform-specific dependencies
-    'PyDispatcher>=2.0.5; platform_python_implementation == "CPython"',
+    'PyDispatcher>=2.0.7; platform_python_implementation == "CPython"',
     'PyPyDispatcher>=2.1.0; platform_python_implementation == "PyPy"',
 ]
 classifiers = [
@@ -36,10 +33,8 @@ classifiers = [
     "Operating System :: OS Independent",
     "Programming Language :: Python",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.10",
-    "Programming Language :: Python :: 3.11",
-    "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Programming Language :: Python :: Implementation :: CPython",
     "Programming Language :: Python :: Implementation :: PyPy",
     "Topic :: Internet :: WWW/HTTP",
@@ -49,7 +44,7 @@ classifiers = [
 license = "BSD-3-Clause"
 license-files = ["LICENSE", "AUTHORS"]
 readme = "README.rst"
-requires-python = ">=3.10"
+requires-python = ">=3.13"
 authors = [{ name = "Scrapy developers", email = "pablo@pablohoffman.com" }]
 maintainers = [{ name = "Pablo Hoffman", email = "pablo@pablohoffman.com" }]
 
@@ -90,25 +85,13 @@ implicit_reexport = false
 
 # Interface classes are hard to support
 [[tool.mypy.overrides]]
-module = "twisted.internet.interfaces"
-follow_imports = "skip"
-
-[[tool.mypy.overrides]]
 module = "scrapy.interfaces"
 ignore_errors = true
-
-[[tool.mypy.overrides]]
-module = "twisted.internet.reactor"
-follow_imports = "skip"
 
 # FIXME: remove the following section once the issues are solved
 [[tool.mypy.overrides]]
 module = "scrapy.settings.default_settings"
 ignore_errors = true
-
-[[tool.mypy.overrides]]
-module = "twisted"
-implicit_reexport = true
 
 [tool.bumpversion]
 current_version = "2.13.4"
@@ -221,22 +204,17 @@ disable = [
 ]
 
 [tool.pytest.ini_options]
-addopts = [
-    "--reactor=asyncio",
-]
+addopts = []
 xfail_strict = true
 python_files = ["test_*.py", "test_*/__init__.py"]
 markers = [
-    "only_asyncio: marks tests as only enabled when --reactor=asyncio is passed",
-    "only_not_asyncio: marks tests as only enabled when --reactor=asyncio is not passed",
     "requires_uvloop: marks tests as only enabled when uvloop is known to be working",
     "requires_botocore: marks tests that need botocore (but not boto3)",
     "requires_boto3: marks tests that need botocore and boto3",
     "requires_mitmproxy: marks tests that need mitmproxy",
 ]
-filterwarnings = [
-    "ignore::DeprecationWarning:twisted.web.static"
-]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
 
 [tool.ruff.lint]
 extend-select = [
@@ -400,13 +378,7 @@ ignore = [
 ]
 
 [tool.ruff.lint.flake8-tidy-imports]
-banned-module-level-imports = [
-    "twisted.internet.reactor",
-    # indirectly imports twisted.conch.insults.helper which imports twisted.internet.reactor
-    "twisted.conch.manhole",
-    # directly imports twisted.internet.reactor
-    "twisted.protocols.ftp",
-]
+banned-module-level-imports = []
 
 [tool.ruff.lint.isort]
 split-on-trailing-comma = false

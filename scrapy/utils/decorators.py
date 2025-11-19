@@ -1,12 +1,10 @@
 from __future__ import annotations
 
+import asyncio
 import inspect
 import warnings
 from functools import wraps
 from typing import TYPE_CHECKING, Any, ParamSpec, TypeVar, overload
-
-from twisted.internet.defer import Deferred, maybeDeferred
-from twisted.internet.threads import deferToThread
 
 from scrapy.exceptions import ScrapyDeprecationWarning
 
@@ -42,24 +40,30 @@ def deprecated(
     return deco
 
 
-def defers(func: Callable[_P, _T]) -> Callable[_P, Deferred[_T]]:
-    """Decorator to make sure a function always returns a deferred"""
+def defers(func: Callable[_P, _T]) -> Callable[_P, Coroutine[Any, Any, _T]]:
+    """Decorator to make sure a function always returns a coroutine"""
 
     @wraps(func)
-    def wrapped(*a: _P.args, **kw: _P.kwargs) -> Deferred[_T]:
-        return maybeDeferred(func, *a, **kw)
+    async def wrapped(*a: _P.args, **kw: _P.kwargs) -> _T:
+        result = func(*a, **kw)
+        # If it's already a coroutine/awaitable, await it
+        if inspect.iscoroutine(result) or inspect.isawaitable(result):
+            return await result
+        # Otherwise return the result directly
+        return result  # type: ignore[return-value]
 
     return wrapped
 
 
-def inthread(func: Callable[_P, _T]) -> Callable[_P, Deferred[_T]]:
-    """Decorator to call a function in a thread and return a deferred with the
+def inthread(func: Callable[_P, _T]) -> Callable[_P, Coroutine[Any, Any, _T]]:
+    """Decorator to call a function in a thread pool and return a coroutine with the
     result
     """
 
     @wraps(func)
-    def wrapped(*a: _P.args, **kw: _P.kwargs) -> Deferred[_T]:
-        return deferToThread(func, *a, **kw)
+    async def wrapped(*a: _P.args, **kw: _P.kwargs) -> _T:
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(None, lambda: func(*a, **kw))
 
     return wrapped
 
