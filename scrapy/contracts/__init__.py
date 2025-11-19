@@ -16,7 +16,7 @@ from scrapy.utils.spider import iterate_spider_output
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-    from twisted.python.failure import Failure
+    from scrapy.utils.defer import Failure
 
     from scrapy import Spider
 

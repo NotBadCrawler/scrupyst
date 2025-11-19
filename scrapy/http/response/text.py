@@ -29,7 +29,7 @@ from scrapy.utils.response import get_base_url
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable, Mapping
 
-    from twisted.python.failure import Failure
+    from scrapy.utils.defer import Failure
 
     from scrapy.http.request import CallbackT, CookiesT, Request
     from scrapy.link import Link

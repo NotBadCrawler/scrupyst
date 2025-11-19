@@ -14,7 +14,7 @@ from scrapy.utils.request import (
 )
 
 if TYPE_CHECKING:
-    from twisted.internet.defer import Deferred
+    import asyncio
 
     # typing.Self requires Python 3.11
     from typing_extensions import Self
@@ -35,10 +35,10 @@ class BaseDupeFilter:
     def request_seen(self, request: Request) -> bool:
         return False
 
-    def open(self) -> Deferred[None] | None:
+    def open(self) -> asyncio.Future[None] | None:
         pass
 
-    def close(self, reason: str) -> Deferred[None] | None:
+    def close(self, reason: str) -> asyncio.Future[None] | None:
         pass
 
     def log(self, request: Request, spider: Spider) -> None:

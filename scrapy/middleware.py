@@ -15,8 +15,7 @@ from scrapy.utils.python import global_object_name
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable
-
-    from twisted.internet.defer import Deferred
+    import asyncio
 
     # typing.Self requires Python 3.11
     from typing_extensions import Self
@@ -164,13 +163,13 @@ class MiddlewareManager(ABC):
                 obj = await ensure_awaitable(method(obj, *args))
         return obj
 
-    def open_spider(self, spider: Spider) -> Deferred[list[None]]:  # pragma: no cover
+    def open_spider(self, spider: Spider) -> asyncio.Future[list[None]]:  # pragma: no cover
         raise NotImplementedError(
             "MiddlewareManager.open_spider() is no longer implemented"
             " and will be removed in a future Scrapy version."
         )
 
-    def close_spider(self, spider: Spider) -> Deferred[list[None]]:  # pragma: no cover
+    def close_spider(self, spider: Spider) -> asyncio.Future[list[None]]:  # pragma: no cover
         raise NotImplementedError(
             "MiddlewareManager.close_spider() is no longer implemented"
             " and will be removed in a future Scrapy version."
