@@ -103,11 +103,10 @@ class Crawler:
 
         reactor_class: str = self.settings["TWISTED_REACTOR"]
         event_loop: str = self.settings["ASYNCIO_EVENT_LOOP"]
-        if self._init_reactor:
-            # this needs to be done after the spider settings are merged
-            if reactor_class:
-                install_reactor(reactor_class, event_loop)
-            # Reactor is no longer needed with pure asyncio, 
+        # this needs to be done after the spider settings are merged
+        if self._init_reactor and reactor_class:
+            install_reactor(reactor_class, event_loop)
+            # Reactor is no longer needed with pure asyncio,
             # but we keep the install_reactor call for backward compatibility
         if reactor_class:
             verify_installed_reactor(reactor_class)
@@ -186,7 +185,7 @@ class Crawler:
     def stop(self) -> asyncio.Task[None]:
         """Start a graceful stop of the crawler and return a task that completes
         when the crawler is stopped.
-        
+
         .. deprecated:: VERSION
             Use :meth:`stop_async` instead.
         """
@@ -404,9 +403,7 @@ class CrawlerRunner(CrawlerRunnerBase):
         crawler = self.create_crawler(crawler_or_spidercls)
         return self._crawl(crawler, *args, **kwargs)
 
-    def _crawl(
-        self, crawler: Crawler, *args: Any, **kwargs: Any
-    ) -> asyncio.Task[None]:
+    def _crawl(self, crawler: Crawler, *args: Any, **kwargs: Any) -> asyncio.Task[None]:
         self.crawlers.add(crawler)
         task = asyncio.create_task(crawler.crawl_async(*args, **kwargs))
         self._active.add(task)
@@ -558,7 +555,9 @@ class CrawlerProcessBase(CrawlerRunnerBase):
             "Received %(signame)s, shutting down gracefully. Send again to force ",
             {"signame": signame},
         )
-        loop.call_soon_threadsafe(lambda: asyncio.create_task(self._graceful_stop_loop()))
+        loop.call_soon_threadsafe(
+            lambda: asyncio.create_task(self._graceful_stop_loop())
+        )
 
     def _signal_kill(self, signum: int, _: Any) -> None:
         loop = asyncio.get_event_loop()
@@ -571,19 +570,19 @@ class CrawlerProcessBase(CrawlerRunnerBase):
 
     def _setup_event_loop(self, install_signal_handlers_flag: bool) -> None:
         loop = asyncio.get_event_loop()
-        
+
         resolver_class = load_object(self.settings["DNS_RESOLVER"])
         # We pass self, which is CrawlerProcess, instead of Crawler here,
         # which works because the default resolvers only use crawler.settings.
         # Note: DNS resolver may need asyncio adaptation
         resolver = build_from_crawler(resolver_class, self)  # type: ignore[arg-type]
-        if hasattr(resolver, 'install_on_reactor'):
+        if hasattr(resolver, "install_on_reactor"):
             # For backward compatibility with resolvers that expect reactor
             resolver.install_on_reactor()
-        
+
         # Note: Thread pool management in asyncio is different from Twisted
         # The default executor can be configured if needed
-        
+
         if install_signal_handlers_flag:
             # Install signal handlers when loop starts
             loop.call_soon(install_shutdown_handlers, self._signal_shutdown)
@@ -610,7 +609,7 @@ class CrawlerProcess(CrawlerProcessBase, CrawlerRunner):
     A class to run multiple scrapy crawlers in a process simultaneously.
 
     This class extends :class:`~scrapy.crawler.CrawlerRunner` by adding support
-    for starting an asyncio event loop and handling shutdown signals, like the 
+    for starting an asyncio event loop and handling shutdown signals, like the
     keyboard interrupt command Ctrl-C. It also configures top-level logging.
 
     This utility should be a better fit than
@@ -682,7 +681,7 @@ class AsyncCrawlerProcess(CrawlerProcessBase, AsyncCrawlerRunner):
     A class to run multiple scrapy crawlers in a process simultaneously.
 
     This class extends :class:`~scrapy.crawler.AsyncCrawlerRunner` by adding support
-    for starting an asyncio event loop and handling shutdown signals, like the 
+    for starting an asyncio event loop and handling shutdown signals, like the
     keyboard interrupt command Ctrl-C. It also configures top-level logging.
 
     This utility should be a better fit than
