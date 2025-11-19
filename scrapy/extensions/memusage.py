@@ -21,7 +21,7 @@ from scrapy.utils.defer import _schedule_coro
 from scrapy.utils.engine import get_engine_status
 
 if TYPE_CHECKING:
-    from twisted.internet.task import LoopingCall
+    from scrapy.utils.asyncio import AsyncioLoopingCall
 
     # typing.Self requires Python 3.11
     from typing_extensions import Self
@@ -68,7 +68,7 @@ class MemoryUsage:
     def engine_started(self) -> None:
         assert self.crawler.stats
         self.crawler.stats.set_value("memusage/startup", self.get_virtual_size())
-        self.tasks: list[AsyncioLoopingCall | LoopingCall] = []
+        self.tasks: list[AsyncioLoopingCall] = []
         tsk = create_looping_call(self.update)
         self.tasks.append(tsk)
         tsk.start(self.check_interval, now=True)

@@ -21,8 +21,8 @@ from scrapy.utils.asyncio import (
 from scrapy.utils.defer import _schedule_coro
 
 if TYPE_CHECKING:
-    from twisted.internet.task import LoopingCall
-    from twisted.python.failure import Failure
+    from scrapy.utils.asyncio import AsyncioLoopingCall
+    from scrapy.utils.defer import Failure
 
     # typing.Self requires Python 3.11
     from typing_extensions import Self
@@ -42,7 +42,7 @@ class CloseSpider:
         self.task: CallLaterResult | None = None
 
         # for CLOSESPIDER_TIMEOUT_NO_ITEM
-        self.task_no_item: AsyncioLoopingCall | LoopingCall | None = None
+        self.task_no_item: AsyncioLoopingCall | None = None
 
         self.close_on: dict[str, Any] = {
             "timeout": crawler.settings.getfloat("CLOSESPIDER_TIMEOUT"),
