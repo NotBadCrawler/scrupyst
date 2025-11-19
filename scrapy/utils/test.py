@@ -12,10 +12,7 @@ from importlib import import_module
 from pathlib import Path
 from posixpath import split
 from typing import TYPE_CHECKING, Any, TypeVar, cast
-from unittest import mock
-
-from twisted.trial.unittest import SkipTest
-from twisted.web.client import Agent
+from unittest import SkipTest, mock
 
 from scrapy.crawler import CrawlerRunner
 from scrapy.exceptions import ScrapyDeprecationWarning
@@ -25,10 +22,10 @@ from scrapy.utils.reactor import is_asyncio_reactor_installed, is_reactor_instal
 from scrapy.utils.spider import DefaultSpider
 
 if TYPE_CHECKING:
+    from asyncio import Future
     from collections.abc import Awaitable
 
-    from twisted.internet.defer import Deferred
-    from twisted.web.client import Response as TxResponse
+    from aiohttp import ClientResponse
 
     from scrapy import Spider
     from scrapy.crawler import Crawler
@@ -196,8 +193,11 @@ def mock_google_cloud_storage() -> tuple[Any, Any, Any]:
     return (client_mock, bucket_mock, blob_mock)
 
 
-def get_web_client_agent_req(url: str) -> Deferred[TxResponse]:
-    from twisted.internet import reactor
+async def get_web_client_agent_req(url: str) -> ClientResponse:
+    import aiohttp  # noqa: PLC0415
 
-    agent = Agent(reactor)
-    return cast("Deferred[TxResponse]", agent.request(b"GET", url.encode("utf-8")))
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url) as response:
+            # Read the response body to ensure connection is complete
+            await response.read()
+            return response

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import inspect
 import logging
 from typing import TYPE_CHECKING, Any, TypeVar, overload
@@ -9,10 +10,9 @@ from scrapy.utils.defer import deferred_from_coro
 from scrapy.utils.misc import arg_to_iter
 
 if TYPE_CHECKING:
+    from asyncio import Future
     from collections.abc import AsyncGenerator, Iterable
     from types import CoroutineType, ModuleType
-
-    from twisted.internet.defer import Deferred
 
     from scrapy import Request
     from scrapy.spiderloader import SpiderLoaderProtocol
@@ -29,7 +29,7 @@ def iterate_spider_output(result: AsyncGenerator[_T]) -> AsyncGenerator[_T]: ...
 
 
 @overload
-def iterate_spider_output(result: CoroutineType[Any, Any, _T]) -> Deferred[_T]: ...
+def iterate_spider_output(result: CoroutineType[Any, Any, _T]) -> Future[_T]: ...
 
 
 @overload
@@ -38,13 +38,23 @@ def iterate_spider_output(result: _T) -> Iterable[Any]: ...
 
 def iterate_spider_output(
     result: Any,
-) -> Iterable[Any] | AsyncGenerator[_T] | Deferred[_T]:
+) -> Iterable[Any] | AsyncGenerator[_T] | Future[_T]:
     if inspect.isasyncgen(result):
         return result
     if inspect.iscoroutine(result):
-        d = deferred_from_coro(result)
-        d.addCallback(iterate_spider_output)
-        return d
+        future = deferred_from_coro(result)
+        
+        def callback_wrapper(fut: asyncio.Future[_T]) -> None:
+            """Wrapper to handle Future result and apply iterate_spider_output."""
+            try:
+                res = fut.result()
+                iterate_spider_output(res)
+            except Exception:
+                # If there's an exception, it's already set on the future
+                pass
+        
+        future.add_done_callback(callback_wrapper)
+        return future
     return arg_to_iter(deferred_from_coro(result))
 
 
