@@ -6,6 +6,7 @@ See documentation in docs/topics/feed-exports.rst
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import logging
 import re
@@ -13,14 +14,13 @@ import sys
 import warnings
 from abc import ABC, abstractmethod
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from pathlib import Path, PureWindowsPath
 from tempfile import NamedTemporaryFile
 from typing import IO, TYPE_CHECKING, Any, Protocol, TypeAlias, cast
 from urllib.parse import unquote, urlparse
 
-from twisted.internet.defer import Deferred, DeferredList, maybeDeferred
-from twisted.internet.threads import deferToThread
 from w3lib.url import file_uri_to_path
 from zope.interface import Interface, implementer
 
@@ -28,7 +28,7 @@ from scrapy import Spider, signals
 from scrapy.exceptions import NotConfigured, ScrapyDeprecationWarning
 from scrapy.extensions.postprocessing import PostProcessingManager
 from scrapy.utils.conf import feed_complete_default_values_from_settings
-from scrapy.utils.defer import maybe_deferred_to_future
+from scrapy.utils.defer import ensure_awaitable
 from scrapy.utils.ftp import ftp_store_file
 from scrapy.utils.log import failure_to_exc_info
 from scrapy.utils.misc import build_from_crawler, load_object
@@ -36,7 +36,8 @@ from scrapy.utils.python import without_none_values
 
 if TYPE_CHECKING:
     from _typeshed import OpenBinaryMode
-    from twisted.python.failure import Failure
+
+    from scrapy.utils.defer import Failure
 
     # typing.Self requires Python 3.11
     from typing_extensions import Self
@@ -117,7 +118,7 @@ class FeedStorageProtocol(Protocol):
         """Open the storage for the given spider. It must return a file-like
         object that will be used for the exporters"""
 
-    def store(self, file: IO[bytes]) -> Deferred[None] | None:
+    def store(self, file: IO[bytes]) -> asyncio.Future[None] | None:
         """Store the given file stream"""
 
 
@@ -130,8 +131,11 @@ class BlockingFeedStorage(ABC):
 
         return NamedTemporaryFile(prefix="feed-", dir=path)
 
-    def store(self, file: IO[bytes]) -> Deferred[None] | None:
-        return deferToThread(self._store_in_thread, file)
+    def store(self, file: IO[bytes]) -> asyncio.Future[None] | None:
+        loop = asyncio.get_event_loop()
+        executor = ThreadPoolExecutor(max_workers=1)
+        future = loop.run_in_executor(executor, self._store_in_thread, file)
+        return asyncio.ensure_future(future)
 
     @abstractmethod
     def _store_in_thread(self, file: IO[bytes]) -> None:
@@ -161,7 +165,7 @@ class StdoutFeedStorage:
     def open(self, spider: Spider) -> IO[bytes]:
         return self._stdout
 
-    def store(self, file: IO[bytes]) -> Deferred[None] | None:
+    def store(self, file: IO[bytes]) -> asyncio.Future[None] | None:
         pass
 
 
@@ -180,7 +184,7 @@ class FileFeedStorage:
             dirname.mkdir(parents=True)
         return Path(self.path).open(self.write_mode)
 
-    def store(self, file: IO[bytes]) -> Deferred[None] | None:
+    def store(self, file: IO[bytes]) -> asyncio.Future[None] | None:
         file.close()
         return None
 
@@ -431,7 +435,7 @@ class FeedSlot:
 
 
 class FeedExporter:
-    _pending_deferreds: list[Deferred[None]] = []
+    _pending_futures: list[asyncio.Future[None]] = []
 
     @classmethod
     def from_crawler(cls, crawler: Crawler) -> Self:
@@ -509,14 +513,14 @@ class FeedExporter:
         for slot in self.slots:
             self._close_slot(slot, spider)
 
-        # Await all deferreds
-        if self._pending_deferreds:
-            await maybe_deferred_to_future(DeferredList(self._pending_deferreds))
+        # Await all futures
+        if self._pending_futures:
+            await asyncio.gather(*self._pending_futures)
 
         # Send FEED_EXPORTER_CLOSED signal
         await self.crawler.signals.send_catch_log_async(signals.feed_exporter_closed)
 
-    def _close_slot(self, slot: FeedSlot, spider: Spider) -> Deferred[None] | None:
+    def _close_slot(self, slot: FeedSlot, spider: Spider) -> asyncio.Future[None] | None:
         def get_file(slot_: FeedSlot) -> IO[bytes]:
             assert slot_.file
             if isinstance(slot_.file, PostProcessingManager):
@@ -536,23 +540,31 @@ class FeedExporter:
             return None
 
         logmsg = f"{slot.format} feed ({slot.itemcount} items) in: {slot.uri}"
-        d: Deferred[None] = maybeDeferred(slot.storage.store, get_file(slot))  # type: ignore[call-overload]
-
-        d.addCallback(
-            self._handle_store_success, logmsg, spider, type(slot.storage).__name__
-        )
-        d.addErrback(
-            self._handle_store_error, logmsg, spider, type(slot.storage).__name__
-        )
-        self._pending_deferreds.append(d)
-        d.addCallback(
-            lambda _: self.crawler.signals.send_catch_log_deferred(
-                signals.feed_slot_closed, slot=slot
-            )
-        )
-        d.addBoth(lambda _: self._pending_deferreds.remove(d))
-
-        return d
+        
+        # Create a task to handle the store operation
+        async def store_and_notify() -> None:
+            try:
+                store_result = slot.storage.store(get_file(slot))
+                if store_result is not None:
+                    await store_result
+                self._handle_store_success(None, logmsg, spider, type(slot.storage).__name__)
+            except Exception as e:
+                from scrapy.utils.defer import Failure
+                self._handle_store_error(Failure(e), logmsg, spider, type(slot.storage).__name__)
+            finally:
+                await self.crawler.signals.send_catch_log_async(
+                    signals.feed_slot_closed, slot=slot
+                )
+        
+        future = asyncio.ensure_future(store_and_notify())
+        self._pending_futures.append(future)
+        
+        def remove_from_pending(_: Any) -> None:
+            if future in self._pending_futures:
+                self._pending_futures.remove(future)
+        
+        future.add_done_callback(remove_from_pending)
+        return future
 
     def _handle_store_error(
         self, f: Failure, logmsg: str, spider: Spider, slot_type: str
