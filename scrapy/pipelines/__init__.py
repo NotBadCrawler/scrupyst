@@ -6,17 +6,16 @@ See documentation in docs/item-pipeline.rst
 
 from __future__ import annotations
 
+import asyncio
 import warnings
 from typing import TYPE_CHECKING, Any, cast
-
-from twisted.internet.defer import Deferred, DeferredList
 
 from scrapy.exceptions import ScrapyDeprecationWarning
 from scrapy.middleware import MiddlewareManager
 from scrapy.utils.conf import build_component_list
 from scrapy.utils.defer import (
     deferred_from_coro,
-    maybe_deferred_to_future,
+    ensure_awaitable,
     maybeDeferred_coro,
 )
 from scrapy.utils.python import global_object_name
@@ -24,7 +23,7 @@ from scrapy.utils.python import global_object_name
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable
 
-    from twisted.python.failure import Failure
+    from scrapy.utils.defer import Failure
 
     from scrapy import Spider
     from scrapy.settings import Settings
@@ -48,7 +47,7 @@ class ItemPipelineManager(MiddlewareManager):
             self.methods["process_item"].append(pipe.process_item)
             self._check_mw_method_spider_arg(pipe.process_item)
 
-    def process_item(self, item: Any, spider: Spider) -> Deferred[Any]:
+    def process_item(self, item: Any, spider: Spider) -> asyncio.Future[Any]:
         warnings.warn(
             f"{global_object_name(type(self))}.process_item() is deprecated, use process_item_async() instead.",
             category=ScrapyDeprecationWarning,
@@ -60,27 +59,30 @@ class ItemPipelineManager(MiddlewareManager):
     async def process_item_async(self, item: Any) -> Any:
         return await self._process_chain("process_item", item, add_spider=True)
 
-    def _process_parallel(self, methodname: str) -> Deferred[list[None]]:
+    def _process_parallel(self, methodname: str) -> asyncio.Future[list[None]]:
         methods = cast("Iterable[Callable[..., None]]", self.methods[methodname])
 
-        def get_dfd(method: Callable[..., None]) -> Deferred[None]:
-            if method in self._mw_methods_requiring_spider:
-                return maybeDeferred_coro(method, self._spider)
-            return maybeDeferred_coro(method)
+        async def gather_methods() -> list[None]:
+            tasks = []
+            for method in methods:
+                if method in self._mw_methods_requiring_spider:
+                    task = ensure_awaitable(maybeDeferred_coro(method, self._spider))
+                else:
+                    task = ensure_awaitable(maybeDeferred_coro(method))
+                tasks.append(task)
+            
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            
+            # Check for exceptions and re-raise the first one
+            for result in results:
+                if isinstance(result, BaseException):
+                    raise result
+            
+            return list(results)  # type: ignore[return-value]
+        
+        return asyncio.ensure_future(gather_methods())
 
-        dfds = [get_dfd(m) for m in methods]
-        d: Deferred[list[tuple[bool, None]]] = DeferredList(
-            dfds, fireOnOneErrback=True, consumeErrors=True
-        )
-        d2: Deferred[list[None]] = d.addCallback(lambda r: [x[1] for x in r])
-
-        def eb(failure: Failure) -> Failure:
-            return failure.value.subFailure
-
-        d2.addErrback(eb)
-        return d2
-
-    def open_spider(self, spider: Spider) -> Deferred[list[None]]:
+    def open_spider(self, spider: Spider) -> asyncio.Future[list[None]]:
         warnings.warn(
             f"{global_object_name(type(self))}.open_spider() is deprecated, use open_spider_async() instead.",
             category=ScrapyDeprecationWarning,
@@ -90,9 +92,9 @@ class ItemPipelineManager(MiddlewareManager):
         return self._process_parallel("open_spider")
 
     async def open_spider_async(self) -> None:
-        await maybe_deferred_to_future(self._process_parallel("open_spider"))
+        await self._process_parallel("open_spider")
 
-    def close_spider(self, spider: Spider) -> Deferred[list[None]]:
+    def close_spider(self, spider: Spider) -> asyncio.Future[list[None]]:
         warnings.warn(
             f"{global_object_name(type(self))}.close_spider() is deprecated, use close_spider_async() instead.",
             category=ScrapyDeprecationWarning,
@@ -102,4 +104,4 @@ class ItemPipelineManager(MiddlewareManager):
         return self._process_parallel("close_spider")
 
     async def close_spider_async(self) -> None:
-        await maybe_deferred_to_future(self._process_parallel("close_spider"))
+        await self._process_parallel("close_spider")
