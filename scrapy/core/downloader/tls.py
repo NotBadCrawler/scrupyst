@@ -1,16 +1,6 @@
 import logging
+import ssl
 from typing import Any
-
-from OpenSSL import SSL
-from service_identity.exceptions import CertificateError
-from twisted.internet._sslverify import (
-    ClientTLSOptions,
-    VerificationError,
-    verifyHostname,
-)
-from twisted.internet.ssl import AcceptableCiphers
-
-from scrapy.utils.ssl import get_temp_key_info, x509name_to_string
 
 logger = logging.getLogger(__name__)
 
@@ -19,73 +9,86 @@ METHOD_TLS = "TLS"
 METHOD_TLSv10 = "TLSv1.0"
 METHOD_TLSv11 = "TLSv1.1"
 METHOD_TLSv12 = "TLSv1.2"
+METHOD_TLSv13 = "TLSv1.3"
 
 
-openssl_methods: dict[str, int] = {
-    METHOD_TLS: SSL.SSLv23_METHOD,  # protocol negotiation (recommended)
-    METHOD_TLSv10: SSL.TLSv1_METHOD,  # TLS 1.0 only
-    METHOD_TLSv11: SSL.TLSv1_1_METHOD,  # TLS 1.1 only
-    METHOD_TLSv12: SSL.TLSv1_2_METHOD,  # TLS 1.2 only
+# Mapping of TLS method names to ssl module protocol constants
+TLS_METHOD_NAMES: dict[str, str] = {
+    METHOD_TLS: METHOD_TLS,  # Auto-negotiate (recommended)
+    METHOD_TLSv10: METHOD_TLSv10,  # TLS 1.0 only (deprecated)
+    METHOD_TLSv11: METHOD_TLSv11,  # TLS 1.1 only (deprecated)
+    METHOD_TLSv12: METHOD_TLSv12,  # TLS 1.2 only
+    METHOD_TLSv13: METHOD_TLSv13,  # TLS 1.3 only
 }
 
 
-class ScrapyClientTLSOptions(ClientTLSOptions):
+DEFAULT_CIPHERS: str = "DEFAULT"
+
+
+def get_ssl_context(
+    method: str = METHOD_TLS,
+    verify_mode: ssl.VerifyMode = ssl.CERT_NONE,
+    ciphers: str | None = None,
+    check_hostname: bool = False,
+    load_default_certs: bool = False,
+) -> ssl.SSLContext:
     """
-    SSL Client connection creator ignoring certificate verification errors
-    (for genuinely invalid certificates or bugs in verification code).
+    Create an SSL context for HTTPS connections.
 
-    Same as Twisted's private _sslverify.ClientTLSOptions,
-    except that VerificationError, CertificateError and ValueError
-    exceptions are caught, so that the connection is not closed, only
-    logging warnings. Also, HTTPS connection parameters logging is added.
+    Args:
+        method: TLS method/version to use
+        verify_mode: Certificate verification mode
+        ciphers: Cipher suite string
+        check_hostname: Whether to check hostname against certificate
+        load_default_certs: Whether to load system's default CA certificates
+
+    Returns:
+        Configured ssl.SSLContext
     """
+    # Create SSL context with appropriate protocol
+    # Use PROTOCOL_TLS_CLIENT for client connections (auto-negotiates version)
+    if method == METHOD_TLS:
+        ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+    else:
+        # For specific TLS versions, we still use PROTOCOL_TLS_CLIENT
+        # and configure minimum/maximum versions
+        ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+        
+        # Map method names to ssl module constants for version control
+        if method == METHOD_TLSv10:
+            ctx.minimum_version = ssl.TLSVersion.TLSv1
+            ctx.maximum_version = ssl.TLSVersion.TLSv1
+        elif method == METHOD_TLSv11:
+            ctx.minimum_version = ssl.TLSVersion.TLSv1_1
+            ctx.maximum_version = ssl.TLSVersion.TLSv1_1
+        elif method == METHOD_TLSv12:
+            ctx.minimum_version = ssl.TLSVersion.TLSv1_2
+            ctx.maximum_version = ssl.TLSVersion.TLSv1_2
+        elif method == METHOD_TLSv13:
+            ctx.minimum_version = ssl.TLSVersion.TLSv1_3
+            ctx.maximum_version = ssl.TLSVersion.TLSv1_3
 
-    def __init__(self, hostname: str, ctx: SSL.Context, verbose_logging: bool = False):
-        super().__init__(hostname, ctx)
-        self.verbose_logging: bool = verbose_logging
+    # Set verification mode
+    ctx.check_hostname = check_hostname
+    ctx.verify_mode = verify_mode
 
-    def _identityVerifyingInfoCallback(
-        self, connection: SSL.Connection, where: int, ret: Any
-    ) -> None:
-        if where & SSL.SSL_CB_HANDSHAKE_START:
-            connection.set_tlsext_host_name(self._hostnameBytes)
-        elif where & SSL.SSL_CB_HANDSHAKE_DONE:
-            if self.verbose_logging:
-                logger.debug(
-                    "SSL connection to %s using protocol %s, cipher %s",
-                    self._hostnameASCII,
-                    connection.get_protocol_version_name(),
-                    connection.get_cipher_name(),
-                )
-                server_cert = connection.get_peer_certificate()
-                if server_cert:
-                    logger.debug(
-                        'SSL connection certificate: issuer "%s", subject "%s"',
-                        x509name_to_string(server_cert.get_issuer()),
-                        x509name_to_string(server_cert.get_subject()),
-                    )
-                key_info = get_temp_key_info(connection._ssl)
-                if key_info:
-                    logger.debug("SSL temp key: %s", key_info)
+    # Load default CA certificates if requested
+    if load_default_certs:
+        ctx.load_default_certs()
 
-            try:
-                verifyHostname(connection, self._hostnameASCII)
-            except (CertificateError, VerificationError) as e:
-                logger.warning(
-                    'Remote certificate is not valid for hostname "%s"; %s',
-                    self._hostnameASCII,
-                    e,
-                )
+    # Set ciphers if specified
+    if ciphers:
+        try:
+            ctx.set_ciphers(ciphers)
+        except ssl.SSLError as e:
+            logger.warning(f"Failed to set ciphers '{ciphers}': {e}")
 
-            except ValueError as e:
-                logger.warning(
-                    "Ignoring error while verifying certificate "
-                    'from host "%s" (exception: %r)',
-                    self._hostnameASCII,
-                    e,
-                )
+    # Enable legacy server connect option for better compatibility
+    # This is equivalent to OpenSSL's OP_LEGACY_SERVER_CONNECT
+    try:
+        ctx.options |= ssl.OP_LEGACY_SERVER_CONNECT  # type: ignore[attr-defined]
+    except AttributeError:
+        # OP_LEGACY_SERVER_CONNECT might not be available
+        pass
 
-
-DEFAULT_CIPHERS: AcceptableCiphers = AcceptableCiphers.fromOpenSSLCipherString(
-    "DEFAULT"
-)
+    return ctx
