@@ -9,7 +9,7 @@ from scrapy.utils.httpobj import urlparse_cached
 from scrapy.utils.misc import build_from_crawler
 
 if TYPE_CHECKING:
-    from twisted.internet.defer import Deferred
+    import asyncio
 
     # typing.Self requires Python 3.11
     from typing_extensions import Self
@@ -78,7 +78,7 @@ class S3DownloadHandler:
     def from_crawler(cls, crawler: Crawler, **kwargs: Any) -> Self:
         return cls(crawler.settings, crawler=crawler, **kwargs)
 
-    def download_request(self, request: Request, spider: Spider) -> Deferred[Response]:
+    def download_request(self, request: Request, spider: Spider) -> asyncio.Future[Response]:
         p = urlparse_cached(request)
         scheme = "https" if request.meta.get("is_secure") else "http"
         bucket = p.hostname

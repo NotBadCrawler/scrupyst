@@ -6,20 +6,19 @@ See documentation in docs/topics/downloader-middleware.rst
 
 from __future__ import annotations
 
+import asyncio
 import warnings
-from typing import TYPE_CHECKING, Any, cast
-
-from twisted.internet.defer import Deferred, inlineCallbacks
+from typing import TYPE_CHECKING, Any, Awaitable, cast
 
 from scrapy.exceptions import ScrapyDeprecationWarning, _InvalidOutput
 from scrapy.http import Request, Response
 from scrapy.middleware import MiddlewareManager
 from scrapy.utils.conf import build_component_list
-from scrapy.utils.defer import _defer_sleep, deferred_from_coro
+from scrapy.utils.defer import _defer_sleep, ensure_awaitable
 from scrapy.utils.deprecate import argument_is_required
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Generator
+    from collections.abc import Callable
 
     from scrapy import Spider
     from scrapy.settings import BaseSettings
@@ -43,13 +42,12 @@ class DownloaderMiddlewareManager(MiddlewareManager):
             self.methods["process_exception"].appendleft(mw.process_exception)
             self._check_mw_method_spider_arg(mw.process_exception)
 
-    @inlineCallbacks
-    def download(
+    async def download(
         self,
-        download_func: Callable[[Request], Deferred[Response]],
+        download_func: Callable[[Request], Awaitable[Response]],
         request: Request,
         spider: Spider | None = None,
-    ) -> Generator[Deferred[Any], Any, Response | Request]:
+    ) -> Response | Request:
         if argument_is_required(download_func, "spider"):
             warnings.warn(
                 "The spider argument of download_func is deprecated"
@@ -61,18 +59,17 @@ class DownloaderMiddlewareManager(MiddlewareManager):
         else:
             need_spider_arg = False
 
-        @inlineCallbacks
-        def process_request(
+        async def process_request(
             request: Request,
-        ) -> Generator[Deferred[Any], Any, Response | Request]:
+        ) -> Response | Request:
             for method in self.methods["process_request"]:
                 method = cast("Callable", method)
                 if method in self._mw_methods_requiring_spider:
-                    response = yield deferred_from_coro(
+                    response = await ensure_awaitable(
                         method(request=request, spider=self._spider)
                     )
                 else:
-                    response = yield deferred_from_coro(method(request=request))
+                    response = await ensure_awaitable(method(request=request))
                 if response is not None and not isinstance(
                     response, (Response, Request)
                 ):
@@ -83,13 +80,12 @@ class DownloaderMiddlewareManager(MiddlewareManager):
                 if response:
                     return response
             if need_spider_arg:
-                return (yield download_func(request, self._spider))  # type: ignore[call-arg]
-            return (yield download_func(request))
+                return await download_func(request, self._spider)  # type: ignore[call-arg]
+            return await download_func(request)
 
-        @inlineCallbacks
-        def process_response(
+        async def process_response(
             response: Response | Request,
-        ) -> Generator[Deferred[Any], Any, Response | Request]:
+        ) -> Response | Request:
             if response is None:
                 raise TypeError("Received None in process_response")
             if isinstance(response, Request):
@@ -98,11 +94,11 @@ class DownloaderMiddlewareManager(MiddlewareManager):
             for method in self.methods["process_response"]:
                 method = cast("Callable", method)
                 if method in self._mw_methods_requiring_spider:
-                    response = yield deferred_from_coro(
+                    response = await ensure_awaitable(
                         method(request=request, response=response, spider=self._spider)
                     )
                 else:
-                    response = yield deferred_from_coro(
+                    response = await ensure_awaitable(
                         method(request=request, response=response)
                     )
                 if not isinstance(response, (Response, Request)):
@@ -114,20 +110,19 @@ class DownloaderMiddlewareManager(MiddlewareManager):
                     return response
             return response
 
-        @inlineCallbacks
-        def process_exception(
+        async def process_exception(
             exception: Exception,
-        ) -> Generator[Deferred[Any], Any, Response | Request]:
+        ) -> Response | Request:
             for method in self.methods["process_exception"]:
                 method = cast("Callable", method)
                 if method in self._mw_methods_requiring_spider:
-                    response = yield deferred_from_coro(
+                    response = await ensure_awaitable(
                         method(
                             request=request, exception=exception, spider=self._spider
                         )
                     )
                 else:
-                    response = yield deferred_from_coro(
+                    response = await ensure_awaitable(
                         method(request=request, exception=exception)
                     )
                 if response is not None and not isinstance(
@@ -145,10 +140,10 @@ class DownloaderMiddlewareManager(MiddlewareManager):
             self._warn_spider_arg("download")
             self._set_compat_spider(spider)
         try:
-            result: Response | Request = yield process_request(request)
+            result: Response | Request = await process_request(request)
         except Exception as ex:
-            yield _defer_sleep()
+            await _defer_sleep()
             # either returns a request or response (which we pass to process_response())
             # or reraises the exception
-            result = yield process_exception(ex)
-        return (yield process_response(result))
+            result = await process_exception(ex)
+        return await process_response(result)
