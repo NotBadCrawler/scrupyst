@@ -1,14 +1,12 @@
 from __future__ import annotations
 
+import asyncio
 import random
 import warnings
 from collections import deque
 from datetime import datetime
 from time import time
 from typing import TYPE_CHECKING, Any, cast
-
-from twisted.internet.defer import Deferred, inlineCallbacks
-from twisted.python.failure import Failure
 
 from scrapy import Request, Spider, signals
 from scrapy.core.downloader.handlers import DownloadHandlers
@@ -23,6 +21,7 @@ from scrapy.utils.asyncio import (
 )
 from scrapy.utils.decorators import _warn_spider_arg
 from scrapy.utils.defer import (
+    Failure,
     _defer_sleep_async,
     _schedule_coro,
     maybe_deferred_to_future,
@@ -30,10 +29,6 @@ from scrapy.utils.defer import (
 from scrapy.utils.httpobj import urlparse_cached
 
 if TYPE_CHECKING:
-    from collections.abc import Generator
-
-    from twisted.internet.task import LoopingCall
-
     from scrapy.crawler import Crawler
     from scrapy.http import Response
     from scrapy.settings import BaseSettings
@@ -54,7 +49,7 @@ class Slot:
         self.randomize_delay: bool = randomize_delay
 
         self.active: set[Request] = set()
-        self.queue: deque[tuple[Request, Deferred[Response]]] = deque()
+        self.queue: deque[tuple[Request, asyncio.Future[Response]]] = deque()
         self.transferring: set[Request] = set()
         self.lastseen: float = 0
         self.latercall: CallLaterResult | None = None
@@ -129,7 +124,7 @@ class Downloader:
         self.middleware: DownloaderMiddlewareManager = (
             DownloaderMiddlewareManager.from_crawler(crawler)
         )
-        self._slot_gc_loop: AsyncioLoopingCall | LoopingCall = create_looping_call(
+        self._slot_gc_loop: AsyncioLoopingCall = create_looping_call(
             self._slot_gc
         )
         self._slot_gc_loop.start(60)
@@ -137,14 +132,13 @@ class Downloader:
             "DOWNLOAD_SLOTS"
         )
 
-    @inlineCallbacks
     @_warn_spider_arg
-    def fetch(
+    async def fetch(
         self, request: Request, spider: Spider | None = None
-    ) -> Generator[Deferred[Any], Any, Response | Request]:
+    ) -> Response | Request:
         self.active.add(request)
         try:
-            return (yield self.middleware.download(self._enqueue_request, request))
+            return await self.middleware.download(self._enqueue_request, request)
         finally:
             self.active.remove(request)
 
@@ -183,10 +177,9 @@ class Downloader:
         return key
 
     # passed as download_func into self.middleware.download() in self.fetch()
-    @inlineCallbacks
-    def _enqueue_request(
+    async def _enqueue_request(
         self, request: Request
-    ) -> Generator[Deferred[Any], Any, Response]:
+    ) -> Response:
         key, slot = self._get_slot(request)
         request.meta[self.DOWNLOAD_SLOT] = key
         slot.active.add(request)
@@ -195,11 +188,11 @@ class Downloader:
             request=request,
             spider=self.crawler.spider,
         )
-        d: Deferred[Response] = Deferred()
+        d: asyncio.Future[Response] = asyncio.Future()
         slot.queue.append((request, d))
         self._process_queue(slot)
         try:
-            return (yield d)  # fired in _wait_for_download()
+            return await d  # fired in _wait_for_download()
         finally:
             slot.active.remove(request)
 
@@ -265,14 +258,14 @@ class Downloader:
             )
 
     async def _wait_for_download(
-        self, slot: Slot, request: Request, queue_dfd: Deferred[Response]
+        self, slot: Slot, request: Request, queue_dfd: asyncio.Future[Response]
     ) -> None:
         try:
             response = await self._download(slot, request)
-        except Exception:
-            queue_dfd.errback(Failure())
+        except Exception as e:
+            queue_dfd.set_exception(e)
         else:
-            queue_dfd.callback(response)  # awaited in _enqueue_request()
+            queue_dfd.set_result(response)  # awaited in _enqueue_request()
 
     def close(self) -> None:
         self._slot_gc_loop.stop()

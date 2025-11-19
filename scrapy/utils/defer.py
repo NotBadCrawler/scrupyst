@@ -74,6 +74,10 @@ async def _defer_sleep() -> None:
     await asyncio.sleep(_DEFER_DELAY)
 
 
+# Alias for backward compatibility
+_defer_sleep_async = _defer_sleep
+
+
 async def parallel(
     iterable: Iterable[_T],
     count: int,
