@@ -1,12 +1,11 @@
 from __future__ import annotations
 
+from http import HTTPStatus
 from typing import TYPE_CHECKING
-
-from twisted.web import http
 
 from scrapy.exceptions import NotConfigured
 from scrapy.utils.decorators import _warn_spider_arg
-from scrapy.utils.python import global_object_name, to_bytes
+from scrapy.utils.python import global_object_name
 from scrapy.utils.request import request_httprepr
 
 if TYPE_CHECKING:
@@ -31,7 +30,12 @@ def get_header_size(
 
 
 def get_status_size(response_status: int) -> int:
-    return len(to_bytes(http.RESPONSES.get(response_status, b""))) + 15
+    try:
+        status = HTTPStatus(response_status)
+        status_phrase = status.phrase.encode('utf-8')
+    except ValueError:
+        status_phrase = b""
+    return len(status_phrase) + 15
     # resp.status + b"\r\n" + b"HTTP/1.1 <100-599> "
 
 

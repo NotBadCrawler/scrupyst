@@ -4,7 +4,7 @@ import logging
 import os
 from typing import TYPE_CHECKING, Any, TypedDict
 
-from twisted.python.failure import Failure
+from scrapy.utils.defer import Failure
 
 # working around https://github.com/sphinx-doc/sphinx/issues/10400
 from scrapy import Request, Spider  # noqa: TC001

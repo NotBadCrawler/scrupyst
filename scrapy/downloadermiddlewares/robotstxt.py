@@ -6,16 +6,14 @@ enable this middleware and enable the ROBOTSTXT_OBEY setting.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import TYPE_CHECKING
-
-from twisted.internet.defer import Deferred
 
 from scrapy.exceptions import IgnoreRequest, NotConfigured
 from scrapy.http import Request, Response
 from scrapy.http.request import NO_CALLBACK
 from scrapy.utils.decorators import _warn_spider_arg
-from scrapy.utils.defer import maybe_deferred_to_future
 from scrapy.utils.httpobj import urlparse_cached
 from scrapy.utils.misc import load_object
 
@@ -40,7 +38,7 @@ class RobotsTxtMiddleware:
         self._default_useragent: str = crawler.settings["USER_AGENT"]
         self._robotstxt_useragent: str | None = crawler.settings["ROBOTSTXT_USER_AGENT"]
         self.crawler: Crawler = crawler
-        self._parsers: dict[str, RobotParser | Deferred[RobotParser | None] | None] = {}
+        self._parsers: dict[str, RobotParser | asyncio.Future[RobotParser | None] | None] = {}
         self._parserimpl: RobotParser = load_object(
             crawler.settings.get("ROBOTSTXT_PARSER")
         )
@@ -86,7 +84,7 @@ class RobotsTxtMiddleware:
         netloc = url.netloc
 
         if netloc not in self._parsers:
-            self._parsers[netloc] = Deferred()
+            self._parsers[netloc] = asyncio.get_event_loop().create_future()
             robotsurl = f"{url.scheme}://{url.netloc}/robots.txt"
             robotsreq = Request(
                 robotsurl,
@@ -111,8 +109,8 @@ class RobotsTxtMiddleware:
             self.crawler.stats.inc_value("robotstxt/request_count")
 
         parser = self._parsers[netloc]
-        if isinstance(parser, Deferred):
-            return await maybe_deferred_to_future(parser)
+        if isinstance(parser, asyncio.Future):
+            return await parser
         return parser
 
     def _parse_robots(self, response: Response, netloc: str) -> None:
@@ -122,17 +120,17 @@ class RobotsTxtMiddleware:
             f"robotstxt/response_status_count/{response.status}"
         )
         rp = self._parserimpl.from_crawler(self.crawler, response.body)
-        rp_dfd = self._parsers[netloc]
-        assert isinstance(rp_dfd, Deferred)
+        rp_future = self._parsers[netloc]
+        assert isinstance(rp_future, asyncio.Future)
         self._parsers[netloc] = rp
-        rp_dfd.callback(rp)
+        rp_future.set_result(rp)
 
     def _robots_error(self, exc: Exception, netloc: str) -> None:
         if not isinstance(exc, IgnoreRequest):
             key = f"robotstxt/exception_count/{type(exc)}"
             assert self.crawler.stats
             self.crawler.stats.inc_value(key)
-        rp_dfd = self._parsers[netloc]
-        assert isinstance(rp_dfd, Deferred)
+        rp_future = self._parsers[netloc]
+        assert isinstance(rp_future, asyncio.Future)
         self._parsers[netloc] = None
-        rp_dfd.callback(None)
+        rp_future.set_result(None)
