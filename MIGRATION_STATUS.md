@@ -6,18 +6,19 @@ This document tracks the progress of migrating Scrapy from Twisted to pure async
 
 ## ⚠️ Important Notice
 
-**Phase 1 & 2 of the migration are now COMPLETE! (~60% of total work)**
+**Phase 1 & 2 of the migration are COMPLETE! Phase 3 is 50% complete! (~65% of total work)**
 
 The codebase still cannot run in its current state as:
-1. Phase 3-5 modules (downloader, crawler, extensions, middleware) still use Twisted
-2. Tests have not been updated
-3. Some modules have mixed Twisted/asyncio code
+1. Phase 3 HTTP/FTP handlers still use Twisted (requires aiohttp rewrite)
+2. Phase 4 modules (crawler, extensions, middleware) still use Twisted
+3. Tests have not been updated
 
 **Phase 1 Status: ✅ COMPLETE - All foundation and utility modules migrated**
 **Phase 2 Status: ✅ COMPLETE - All core engine modules migrated**
-**Next: Phase 3 - Downloader & HTTP migration**
+**Phase 3 Status: ⚠️ 50% COMPLETE - Core downloader migrated, HTTP handlers need rewrite**
+**Next: Complete Phase 3 with aiohttp HTTP client OR move to Phase 4**
 
-**Estimated remaining time with dedicated team: 1-3 months**
+**Estimated remaining time with dedicated team: 2-4 months**
 
 ## Migration Strategy
 
@@ -121,20 +122,47 @@ These modules form the heart of Scrapy's architecture and have been successfully
 **Additional work:**
 - Created asyncio-compatible `Failure` class in `scrapy/utils/defer.py` with `.value` and `.check()` methods
 
-### Phase 3: Downloader & HTTP (0% Complete) 🚫
+### Phase 3: Downloader & HTTP (50% Complete) ⚠️
 
-**Requires complete replacement with aiohttp or httpx**
+**Core infrastructure migrated, HTTP client handlers require replacement**
 
-1. **`scrapy/core/downloader/`** - Entire directory
-   - `__init__.py` - Downloader core
-   - `handlers/http10.py` - HTTP/1.0 handler
-   - `handlers/http11.py` - HTTP/1.1 handler
-   - `handlers/http2.py` - HTTP/2 handler
-   - `handlers/ftp.py` - FTP handler
-   - `webclient.py` - Web client implementation
-   - Middleware stack integration
+✅ **Completed:**
+1. **`scrapy/core/downloader/__init__.py`** (279 lines) - ✅ Fully migrated to asyncio
+   - Removed all Twisted imports (Deferred, inlineCallbacks, Failure)
+   - Updated Slot.queue to use asyncio.Future
+   - Converted fetch() and _enqueue_request() to async/await
+   - Updated _wait_for_download() to use asyncio.Future methods
 
-**Recommendation**: Replace with aiohttp.ClientSession + custom middleware
+2. **`scrapy/core/downloader/handlers/__init__.py`** - ✅ Fully migrated to asyncio
+   - Removed Twisted defer imports
+   - Updated DownloadHandlerProtocol to return asyncio.Future
+   - Converted _close() to async/await
+
+3. **`scrapy/core/downloader/middleware.py`** (149 lines) - ✅ Fully migrated to asyncio
+   - Removed all Twisted imports
+   - Converted download() method to async/await
+   - Updated nested process_* functions to async/await
+   - Replaced deferred_from_coro with ensure_awaitable
+
+4. **Simple handlers migrated:**
+   - `handlers/datauri.py` - ✅ Already pure Python
+   - `handlers/file.py` - ✅ Already pure Python
+   - `handlers/s3.py` - ✅ Type hints updated to asyncio.Future
+
+🚫 **Remaining (Complex HTTP/FTP protocol implementations):**
+1. **`handlers/http10.py`** (65 lines) - Uses twisted.internet.reactor directly (deprecated)
+2. **`handlers/http11.py`** (734 lines) - Heavy Twisted Protocol usage, agent-based
+3. **`handlers/http2.py`** - HTTP/2 support with Twisted
+4. **`handlers/ftp.py`** - FTP protocol with Twisted
+5. **`webclient.py`** (239 lines) - Twisted web client implementation
+6. **`contextfactory.py`** (197 lines) - SSL/TLS context with Twisted
+7. **`tls.py`** (91 lines) - TLS utilities with Twisted
+
+**Recommendation**: Replace HTTP handlers with aiohttp.ClientSession + custom middleware. This is a major architectural change requiring:
+- New HTTP client implementation using aiohttp
+- Port middleware architecture to work with aiohttp
+- Implement HTTP/1.0, HTTP/1.1, HTTP/2 support
+- Decide on FTP handler replacement or removal
 
 ### Phase 4: Crawler Framework (0% Complete) 🚫
 
@@ -234,33 +262,33 @@ The current code is **NOT FUNCTIONAL**. Do not attempt to:
 
 ### Next Steps for Developers
 
-1. **Complete defer.py migration** (HIGHEST PRIORITY)
+1. **Option A: Complete Phase 3 with aiohttp HTTP client** (RECOMMENDED)
+   - Implement aiohttp-based HTTP/1.1 handler
+   - Port HTTP/2 support using aiohttp or httpx
+   - Implement or adapt middleware for aiohttp
+   - Decide on HTTP/1.0 and FTP handler strategy
+
+2. **Option B: Move to Phase 4 (Crawler Framework)**
+   - Migrate `scrapy/crawler.py` to asyncio
+   - Update extension and middleware loading
+   - Convert lifecycle management to async/await
+   - Note: This won't make the code functional without HTTP handlers
+
+3. **Phase 3 Completion Checklist** (if choosing Option A):
    ```python
-   # Create full asyncio equivalent of:
-   - deferred_from_coro → asyncio_ensure_future
-   - maybeDeferred_coro → ensure_awaitable  
-   - maybe_deferred_to_future → to_future
-   - process_chain → async version
-   - process_parallel → asyncio.gather
+   # High-level tasks:
+   - Create aiohttp-based HTTP11DownloadHandler
+   - Implement SSL/TLS support with asyncio
+   - Port or adapt webclient.py for aiohttp
+   - Update contextfactory.py for asyncio SSL
+   - Test with simple HTTP requests
    ```
 
-2. **Complete reactor.py migration**
-   - Pure asyncio event loop management
-   - Remove all Twisted reactor references
-
-3. **Update spider.py and other utils**
-   - Use new defer_asyncio functions
-   - Update type hints
-
-4. **Begin core engine migration**
-   - Start with engine.py
-   - Replace @inlineCallbacks with async/await
-   - Update scheduler and scraper
-
-5. **HTTP client replacement**
-   - Choose HTTP library (recommend aiohttp)
-   - Implement handlers
-   - Port middleware
+4. **For HTTP handlers specifically**:
+   - Study existing http11.py architecture
+   - Design aiohttp integration maintaining middleware compatibility
+   - Implement request/response translation layer
+   - Handle connection pooling and lifecycle
 
 ## Recommendations
 
@@ -306,21 +334,53 @@ Since this is a fork with different goals:
 | 2 | core/scheduler.py | 498 | ✅ Done | - |
 | 2 | core/scraper.py | 531 | ✅ Done | - |
 | 2 | core/spidermw.py | 561 | ✅ Done | - |
-| 3 | core/downloader/ | 2000+ | 🚫 Blocked | P1 |
+| 3 | core/downloader/__init__.py | 279 | ✅ Done | - |
+| 3 | core/downloader/handlers/__init__.py | 107 | ✅ Done | - |
+| 3 | core/downloader/middleware.py | 149 | ✅ Done | - |
+| 3 | handlers/datauri.py | 29 | ✅ Done | - |
+| 3 | handlers/file.py | 25 | ✅ Done | - |
+| 3 | handlers/s3.py | 101 | ✅ Done | - |
+| 3 | handlers/http10.py | 65 | 🚫 Needs HTTP client | P1 |
+| 3 | handlers/http11.py | 734 | 🚫 Needs HTTP client | P1 |
+| 3 | handlers/http2.py | ~200 | 🚫 Needs HTTP client | P1 |
+| 3 | handlers/ftp.py | ~150 | 🚫 Needs FTP client | P2 |
+| 3 | webclient.py | 239 | 🚫 Needs HTTP client | P1 |
+| 3 | contextfactory.py | 197 | 🚫 Needs TLS impl | P1 |
+| 3 | tls.py | 91 | 🚫 Needs TLS impl | P1 |
 | 4 | crawler.py | 750 | 🚫 Blocked | P2 |
-| 5 | tests/ | 10000+ | 🚫 Blocked | P2 |
+| 5 | tests/ | 10000+ | 🚫 Blocked | P3 |
 
 **Legend:**
 - ✅ Done - Fully converted, no Twisted
-- 🚫 Ready to Start - Dependencies met, ready for migration
+- 🚫 Needs HTTP client - Requires aiohttp HTTP client implementation
+- 🚫 Needs FTP client - Requires asyncio FTP client
+- 🚫 Needs TLS impl - Requires asyncio TLS/SSL implementation
 - 🚫 Blocked - Depends on critical items
-- P1 = Do next, P2 = Later
+- P1 = Critical, P2 = Important, P3 = Later
 
 ## Estimated Effort
 
 Based on work completed so far:
 
-- **Completed**: ~5,323 lines converted in Phase 1 & 2 (100% of Phase 1 & 2)
+- **Completed**: ~6,030 lines converted in Phase 1, 2 & 3 (100% of Phase 1 & 2, 50% of Phase 3)
+  - Phase 1: ~3,100 lines (foundation & utilities)
+  - Phase 2: ~2,223 lines (core engine modules)
+  - Phase 3: ~707 lines (downloader infrastructure & simple handlers)
+- **Remaining**: ~6,800+ lines to convert in Phases 3-5
+  - Phase 3 HTTP/FTP handlers: ~1,800 lines (requires major rewrite with aiohttp)
+  - Phase 4 Crawler: ~750 lines
+  - Phase 5 Tests: ~10,000+ lines
+- **Time estimate**: 2-4 months with experienced team
+- **Complexity**: Extremely high - requires deep knowledge of both frameworks
+
+### Recent Progress
+- **✅ PHASE 1 COMPLETE!** All foundation and utility modules migrated
+- **✅ PHASE 2 COMPLETE!** All core engine modules migrated
+- **⚠️ PHASE 3 50% COMPLETE!** Core downloader infrastructure migrated
+- Successfully migrated downloader core, handlers infrastructure, and middleware
+- Migrated simple handlers (datauri, file, s3)
+- **Remaining**: HTTP/FTP protocol handlers requiring aiohttp/asyncio reimplementation
+- **Ready to implement**: aiohttp-based HTTP client or move to Phase 4
   - Phase 1: ~3,100 lines (foundation & utilities)
   - Phase 2: ~2,223 lines (core engine modules)
 - **Remaining**: ~7,500+ lines to convert in Phases 3-5
