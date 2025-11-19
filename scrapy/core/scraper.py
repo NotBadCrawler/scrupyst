@@ -3,14 +3,12 @@ extracts information from them"""
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import warnings
 from collections import deque
 from collections.abc import AsyncIterator
 from typing import TYPE_CHECKING, Any, TypeAlias, TypeVar
-
-from twisted.internet.defer import Deferred, inlineCallbacks
-from twisted.python.failure import Failure
 
 from scrapy import Spider, signals
 from scrapy.core.spidermw import SpiderMiddlewareManager
@@ -25,6 +23,7 @@ from scrapy.pipelines import ItemPipelineManager
 from scrapy.utils.asyncio import _parallel_asyncio, is_asyncio_available
 from scrapy.utils.decorators import _warn_spider_arg
 from scrapy.utils.defer import (
+    Failure,
     _defer_sleep_async,
     _schedule_coro,
     aiter_errback,
@@ -53,7 +52,7 @@ logger = logging.getLogger(__name__)
 
 
 _T = TypeVar("_T")
-QueueTuple: TypeAlias = tuple[Response | Failure, Request, Deferred[None]]
+QueueTuple: TypeAlias = tuple[Response | Failure, Request, asyncio.Future[None]]
 
 
 class Slot:
@@ -67,24 +66,24 @@ class Slot:
         self.active: set[Request] = set()
         self.active_size: int = 0
         self.itemproc_size: int = 0
-        self.closing: Deferred[Spider] | None = None
+        self.closing: asyncio.Future[Spider] | None = None
 
     def add_response_request(
         self, result: Response | Failure, request: Request
-    ) -> Deferred[None]:
-        # this Deferred will be awaited in enqueue_scrape()
-        deferred: Deferred[None] = Deferred()
-        self.queue.append((result, request, deferred))
+    ) -> asyncio.Future[None]:
+        # this Future will be awaited in enqueue_scrape()
+        future: asyncio.Future[None] = asyncio.Future()
+        self.queue.append((result, request, future))
         if isinstance(result, Response):
             self.active_size += max(len(result.body), self.MIN_RESPONSE_SIZE)
         else:
             self.active_size += self.MIN_RESPONSE_SIZE
-        return deferred
+        return future
 
     def next_response_request_deferred(self) -> QueueTuple:
-        result, request, deferred = self.queue.popleft()
+        result, request, future = self.queue.popleft()
         self.active.add(request)
-        return result, request, deferred
+        return result, request, future
 
     def finish_response(self, result: Response | Failure, request: Request) -> None:
         self.active.remove(request)
@@ -151,7 +150,7 @@ class Scraper:
         else:
             self._itemproc_has_async[method] = True
 
-    def open_spider(self, spider: Spider | None = None) -> Deferred[None]:
+    def open_spider(self, spider: Spider | None = None) -> asyncio.Future[None]:
         warnings.warn(
             "Scraper.open_spider() is deprecated, use open_spider_async() instead",
             ScrapyDeprecationWarning,
@@ -176,7 +175,7 @@ class Scraper:
                 self.itemproc.open_spider(self.crawler.spider)
             )
 
-    def close_spider(self, spider: Spider | None = None) -> Deferred[None]:
+    def close_spider(self, spider: Spider | None = None) -> asyncio.Future[None]:
         warnings.warn(
             "Scraper.close_spider() is deprecated, use close_spider_async() instead",
             ScrapyDeprecationWarning,
@@ -210,19 +209,19 @@ class Scraper:
         assert self.slot is not None  # typing
         if self.slot.closing and self.slot.is_idle():
             assert self.crawler.spider
-            self.slot.closing.callback(self.crawler.spider)
+            if not self.slot.closing.done():
+                self.slot.closing.set_result(self.crawler.spider)
 
-    @inlineCallbacks
     @_warn_spider_arg
-    def enqueue_scrape(
+    async def enqueue_scrape(
         self, result: Response | Failure, request: Request, spider: Spider | None = None
-    ) -> Generator[Deferred[Any], Any, None]:
+    ) -> None:
         if self.slot is None:
             raise RuntimeError("Scraper slot not assigned")
-        dfd = self.slot.add_response_request(result, request)
+        future = self.slot.add_response_request(result, request)
         self._scrape_next()
         try:
-            yield dfd  # fired in _wait_for_processing()
+            await future  # fired in _wait_for_processing()
         except Exception:
             logger.error(
                 "Scraper bug processing %(request)s",
@@ -283,18 +282,20 @@ class Scraper:
             await self.handle_spider_output_async(output, request, result)
 
     async def _wait_for_processing(
-        self, result: Response | Failure, request: Request, queue_dfd: Deferred[None]
+        self, result: Response | Failure, request: Request, queue_future: asyncio.Future[None]
     ) -> None:
         try:
             await self._scrape(result, request)
-        except Exception:
-            queue_dfd.errback(Failure())
+        except Exception as e:
+            if not queue_future.done():
+                queue_future.set_exception(e)
         else:
-            queue_dfd.callback(None)  # awaited in enqueue_scrape()
+            if not queue_future.done():
+                queue_future.set_result(None)  # awaited in enqueue_scrape()
 
     def call_spider(
         self, result: Response | Failure, request: Request, spider: Spider | None = None
-    ) -> Deferred[Iterable[Any] | AsyncIterator[Any]]:
+    ) -> asyncio.Future[Iterable[Any] | AsyncIterator[Any]]:
         warnings.warn(
             "Scraper.call_spider() is deprecated, use call_spider_async() instead",
             ScrapyDeprecationWarning,
@@ -374,7 +375,7 @@ class Scraper:
         request: Request,
         response: Response | Failure,
         spider: Spider | None = None,
-    ) -> Deferred[None]:
+    ) -> asyncio.Future[None]:
         """Pass items/requests produced by a callback to ``_process_spidermw_output()`` in parallel."""
         warnings.warn(
             "Scraper.handle_spider_output() is deprecated, use handle_spider_output_async() instead",
@@ -428,7 +429,7 @@ class Scraper:
 
     def _process_spidermw_output(
         self, output: Any, response: Response | Failure
-    ) -> Deferred[None]:
+    ) -> asyncio.Future[None]:
         """Process each Request/Item (given in the output parameter) returned
         from the given spider.
 
@@ -453,7 +454,7 @@ class Scraper:
 
     def start_itemproc(
         self, item: Any, *, response: Response | Failure | None
-    ) -> Deferred[None]:
+    ) -> asyncio.Future[None]:
         """Send *item* to the item pipelines for processing.
 
         *response* is the source of the item data. If the item does not come
