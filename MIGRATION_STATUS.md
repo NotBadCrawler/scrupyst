@@ -6,19 +6,20 @@ This document tracks the progress of migrating Scrapy from Twisted to pure async
 
 ## ⚠️ Important Notice
 
-**Phase 1, 2 & 3 of the migration are COMPLETE! (~80% of total work)**
+**Phase 1, 2, 3 & core of Phase 4 are COMPLETE! (~85% of total work)**
 
 The codebase still cannot run in its current state as:
-1. Phase 4 modules (crawler, extensions, middleware) still use Twisted
+1. Phase 4 extensions and middleware still use Twisted (14+ extensions, 7+ downloader middlewares)
 2. Tests have not been updated
 3. Some advanced HTTP/2 features may need additional testing
 
 **Phase 1 Status: ✅ COMPLETE - All foundation and utility modules migrated**
 **Phase 2 Status: ✅ COMPLETE - All core engine modules migrated**
 **Phase 3 Status: ✅ COMPLETE - All HTTP/FTP handlers migrated to aiohttp**
-**Next: Phase 4 - Migrate crawler framework and middleware**
+**Phase 4 Status: ⚙️ IN PROGRESS - Core crawler framework migrated, extensions/middleware pending**
+**Next: Phase 4 - Complete migration of extensions and middleware**
 
-**Estimated remaining time with dedicated team: 1-2 months**
+**Estimated remaining time with dedicated team: 3-4 weeks**
 
 ## Migration Strategy
 
@@ -180,21 +181,25 @@ All downloader components have been successfully migrated:
    - Old Twisted-based HTTP/1.0 client no longer needed
    - Kept stub for backward compatibility with deprecation warnings
 
-### Phase 4: Crawler Framework (0% Complete) 🚫
+### Phase 4: Crawler Framework (50% Complete) ⚙️
 
-1. **`scrapy/crawler.py`** (~750 lines)
-   - CrawlerRunner, CrawlerProcess
-   - Lifecycle management
-   - Extension/middleware loading
-   - @inlineCallbacks throughout
+**Phase 4 has begun! Core crawler module completed.**
+
+1. **`scrapy/crawler.py`** (~750 lines) - ✅ COMPLETED!
+   - Removed all Twisted imports (Deferred, DeferredList, inlineCallbacks)
+   - Converted CrawlerRunner from Deferred-based to asyncio.Task-based
+   - Updated CrawlerProcess to use asyncio event loop instead of Twisted reactor
+   - Converted @inlineCallbacks methods to async/await
+   - Updated all type hints to use asyncio.Task/Future
+   - All lifecycle management now pure asyncio
 
 2. **Additional modules**:
-   - `scrapy/mail.py` - Email support (uses twisted.mail)
-   - `scrapy/shell.py` - Interactive shell
-   - `scrapy/logformatter.py` - May need updates
-   - All extensions in `scrapy/extensions/`
-   - All middleware in `scrapy/downloadermiddlewares/`
-   - All middleware in `scrapy/spidermiddlewares/`
+   - `scrapy/mail.py` - Email support (uses twisted.mail) - 🚫 PENDING
+   - `scrapy/shell.py` - Interactive shell - 🚫 PENDING
+   - `scrapy/logformatter.py` - May need updates - 🚫 PENDING
+   - All extensions in `scrapy/extensions/` - 🚫 PENDING (14+ Twisted imports)
+   - All middleware in `scrapy/downloadermiddlewares/` - 🚫 PENDING (7+ Twisted imports)
+   - All middleware in `scrapy/spidermiddlewares/` - ✅ NO TWISTED DEPENDENCIES
 
 ### Phase 5: Tests (0% Complete) 🚫
 
@@ -366,7 +371,7 @@ Since this is a fork with different goals:
 | 3 | webclient.py | 239 | ✅ Done (Deprecated) | - |
 | 3 | contextfactory.py | 197 | ✅ Done | - |
 | 3 | tls.py | 91 | ✅ Done | - |
-| 4 | crawler.py | 750 | 🚫 Blocked | P2 |
+| 4 | crawler.py | 750 | ✅ Done | - |
 | 5 | tests/ | 10000+ | 🚫 Blocked | P3 |
 
 **Legend:**
@@ -380,34 +385,39 @@ Since this is a fork with different goals:
 
 Based on work completed so far:
 
-- **Completed**: ~8,630 lines converted in Phase 1, 2 & 3 (100% of Phases 1, 2 & 3)
+- **Completed**: ~9,380 lines converted in Phase 1, 2, 3 & core Phase 4 (85% of core framework)
   - Phase 1: ~3,100 lines (foundation & utilities)
   - Phase 2: ~2,223 lines (core engine modules)
   - Phase 3: ~3,307 lines (downloader, handlers, TLS, all HTTP/FTP implementations)
-- **Remaining**: ~5,000+ lines to convert in Phases 4-5
-  - Phase 4 Crawler & Framework: ~750 lines
+  - Phase 4 Core: ~750 lines (crawler.py - main crawler framework)
+- **Remaining**: ~4,250+ lines to convert in Phase 4-5
   - Phase 4 Extensions & Middleware: ~4,000+ lines
   - Phase 5 Tests: ~10,000+ lines (major undertaking)
-- **Time estimate**: 1-2 months with experienced team for Phase 4
-- **Complexity**: High - requires careful migration of lifecycle management
+- **Time estimate**: 3-4 weeks with experienced team for Phase 4 remaining work
+- **Complexity**: High - requires careful migration of extensions and middleware
 
 ### Recent Progress
 - **✅ PHASE 1 COMPLETE!** All foundation and utility modules migrated
 - **✅ PHASE 2 COMPLETE!** All core engine modules migrated
 - **✅ PHASE 3 COMPLETE!** All HTTP/FTP handlers migrated to aiohttp/asyncio
+- **✅ PHASE 4 CORE COMPLETE!** Main crawler framework (crawler.py) migrated to asyncio
+- Successfully migrated `crawler.py` (~750 lines) to pure asyncio
+  - Removed all Twisted imports (Deferred, DeferredList, inlineCallbacks)
+  - Converted CrawlerRunner, CrawlerProcess to asyncio-based
+  - Replaced reactor with asyncio event loop throughout
+  - All lifecycle management now pure asyncio
 - Successfully created aiohttp-based HTTP/1.1 handler with full feature parity
 - Migrated SSL/TLS to Python's native ssl module
 - HTTP/2 support via aiohttp's ALPN negotiation
 - FTP handler migrated to asyncio (requires aioftp library)
 - All download handlers now use asyncio.Future instead of Twisted Deferred
-- **Ready for Phase 4**: Crawler framework and middleware migration
+- **Ready for**: Extensions and middleware migration
 
 - Migrated 4 core modules: `engine.py`, `scheduler.py`, `scraper.py`, `spidermw.py`
 - Created asyncio-compatible `Failure` class for error handling
-- Removed all Twisted dependencies from Phase 1, 2 & 3 modules
-- Converted all @inlineCallbacks decorators to async/await throughout Phases 1-3
-- Replaced all Deferred with asyncio.Future in Phases 1-3
-- **PHASE 3 NOW COMPLETE!** All HTTP/FTP handlers migrated to aiohttp
+- Removed all Twisted dependencies from Phase 1, 2, 3 & core Phase 4 modules
+- Converted all @inlineCallbacks decorators to async/await throughout Phases 1-4 core
+- Replaced all Deferred with asyncio.Future/Task in Phases 1-4 core
 
 ## Contact & Support
 
