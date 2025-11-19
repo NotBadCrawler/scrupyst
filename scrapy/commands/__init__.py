@@ -11,8 +11,6 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from twisted.python import failure
-
 from scrapy.exceptions import UsageError
 from scrapy.utils.conf import arglist_to_dict, feed_process_params_from_cli
 
@@ -128,7 +126,17 @@ class ScrapyCommand(ABC):
             )
 
         if opts.pdb:
-            failure.startDebugMode()
+            # Enable post-mortem debugging
+            import sys
+            import pdb
+            
+            def debug_exception_handler(exc_type, exc_value, exc_traceback):
+                if exc_type is KeyboardInterrupt:
+                    sys.__excepthook__(exc_type, exc_value, exc_traceback)
+                    return
+                pdb.post_mortem(exc_traceback)
+            
+            sys.excepthook = debug_exception_handler
 
     @abstractmethod
     def run(self, args: list[str], opts: argparse.Namespace) -> None:

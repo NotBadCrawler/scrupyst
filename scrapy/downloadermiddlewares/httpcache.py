@@ -1,19 +1,8 @@
 from __future__ import annotations
 
+import asyncio
 from email.utils import formatdate
 from typing import TYPE_CHECKING
-
-from twisted.internet import defer
-from twisted.internet.error import (
-    ConnectError,
-    ConnectionDone,
-    ConnectionLost,
-    DNSLookupError,
-    TCPTimedOutError,
-)
-from twisted.internet.error import ConnectionRefusedError as TxConnectionRefusedError
-from twisted.internet.error import TimeoutError as TxTimeoutError
-from twisted.web.client import ResponseFailed
 
 from scrapy import signals
 from scrapy.exceptions import IgnoreRequest, NotConfigured
@@ -34,16 +23,13 @@ if TYPE_CHECKING:
 
 class HttpCacheMiddleware:
     DOWNLOAD_EXCEPTIONS = (
-        defer.TimeoutError,
-        TxTimeoutError,
-        DNSLookupError,
-        TxConnectionRefusedError,
-        ConnectionDone,
-        ConnectError,
-        ConnectionLost,
-        TCPTimedOutError,
-        ResponseFailed,
+        asyncio.TimeoutError,
+        TimeoutError,
         OSError,
+        ConnectionRefusedError,
+        ConnectionResetError,
+        ConnectionAbortedError,
+        ConnectionError,
     )
 
     crawler: Crawler
