@@ -1,12 +1,11 @@
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 from pydispatch import dispatcher
-from twisted.internet.defer import Deferred
 
 from scrapy.utils import signal as _signal
-from scrapy.utils.defer import maybe_deferred_to_future
 
 
 class SignalManager:
@@ -49,21 +48,21 @@ class SignalManager:
         kwargs.setdefault("sender", self.sender)
         return _signal.send_catch_log(signal, **kwargs)
 
-    def send_catch_log_deferred(
+    async def send_catch_log_deferred(
         self, signal: Any, **kwargs: Any
-    ) -> Deferred[list[tuple[Any, Any]]]:
+    ) -> list[tuple[Any, Any]]:
         """
         Like :meth:`send_catch_log` but supports :ref:`asynchronous signal
         handlers <signal-deferred>`.
 
-        Returns a Deferred that gets fired once all signal handlers
+        Returns an awaitable that completes once all signal handlers
         have finished. Send a signal, catch exceptions and log them.
 
         The keyword arguments are passed to the signal handlers (connected
         through the :meth:`connect` method).
         """
         kwargs.setdefault("sender", self.sender)
-        return _signal.send_catch_log_deferred(signal, **kwargs)
+        return await _signal.send_catch_log_async(signal, **kwargs)
 
     async def send_catch_log_async(
         self, signal: Any, **kwargs: Any
@@ -98,11 +97,12 @@ class SignalManager:
 
         See :ref:`start-requests-lazy` for an example.
         """
-        d = Deferred()
+        future: asyncio.Future[None] = asyncio.Future()
 
         def handle():
             self.disconnect(handle, signal)
-            d.callback(None)
+            if not future.done():
+                future.set_result(None)
 
         self.connect(handle, signal)
-        await maybe_deferred_to_future(d)
+        await future
