@@ -25,33 +25,33 @@ async def listen_tcp(
     portrange: list[int], host: str, protocol_factory: Callable[[], asyncio.Protocol]
 ) -> asyncio.Server:
     """Create a TCP server listening on a port from the range.
-    
+
     Tries ports in the range until one succeeds.
-    
+
     Args:
         portrange: List of 0, 1, or 2 elements specifying port range
         host: Host address to bind to
         protocol_factory: Factory function that creates protocol instances
-        
+
     Returns:
         The created server
-        
+
     Raises:
         ValueError: If portrange has more than 2 elements
         OSError: If no port in the range is available
     """
     loop = asyncio.get_event_loop()
-    
+
     if len(portrange) > 2:
         raise ValueError(f"invalid portrange: {portrange}")
-    
+
     if not portrange:
         # Port 0 means let the OS choose
         return await loop.create_server(protocol_factory, host, 0)
-    
+
     if len(portrange) == 1:
         return await loop.create_server(protocol_factory, host, portrange[0])
-    
+
     # Try each port in the range
     last_error = None
     for port in range(portrange[0], portrange[1] + 1):
@@ -61,14 +61,14 @@ async def listen_tcp(
             last_error = e
             if port == portrange[1]:
                 raise
-    
+
     # This shouldn't be reached, but satisfy type checker
     raise last_error  # type: ignore[misc]
 
 
 class CallLaterOnce(Generic[_T]):
     """Schedule a function to be called in the next event loop iteration.
-    
+
     Only schedules if it hasn't been already scheduled since the last time it ran.
     """
 
@@ -81,7 +81,7 @@ class CallLaterOnce(Generic[_T]):
 
     def schedule(self, delay: float = 0) -> None:
         """Schedule the function to be called after delay seconds.
-        
+
         Args:
             delay: Delay in seconds before calling the function
         """
@@ -116,7 +116,7 @@ class CallLaterOnce(Generic[_T]):
 
 def set_asyncio_event_loop_policy() -> None:
     """Set the appropriate event loop policy for the platform.
-    
+
     On Windows, use WindowsSelectorEventLoopPolicy for compatibility.
     """
     if sys.platform == "win32":
@@ -127,10 +127,10 @@ def set_asyncio_event_loop_policy() -> None:
 
 def install_reactor(reactor_path: str, event_loop_path: str | None = None) -> None:
     """Install the asyncio event loop.
-    
+
     In pure asyncio mode, this primarily sets up the event loop policy and
     optionally installs a custom event loop.
-    
+
     Args:
         reactor_path: Ignored in pure asyncio mode (kept for API compatibility)
         event_loop_path: Optional path to a custom event loop class
@@ -146,10 +146,10 @@ def _get_asyncio_event_loop() -> AbstractEventLoop:
 
 def set_asyncio_event_loop(event_loop_path: str | None) -> AbstractEventLoop:
     """Set and return the event loop with specified import path.
-    
+
     Args:
         event_loop_path: Optional path to a custom event loop class
-        
+
     Returns:
         The event loop instance
     """
@@ -186,22 +186,21 @@ def set_asyncio_event_loop(event_loop_path: str | None) -> AbstractEventLoop:
 
 def verify_installed_reactor(reactor_path: str) -> None:
     """Verify that the asyncio event loop is installed.
-    
+
     In pure asyncio mode, this always passes. Kept for API compatibility.
-    
+
     Args:
         reactor_path: Ignored in pure asyncio mode
     """
     # In pure asyncio mode, we don't need to verify reactor installation
-    pass
 
 
 def verify_installed_asyncio_event_loop(loop_path: str) -> None:
     """Verify that the installed event loop matches the specified import path.
-    
+
     Args:
         loop_path: Path to the expected event loop class
-        
+
     Raises:
         RuntimeError: If the event loop doesn't match the expected class
     """
@@ -215,11 +214,11 @@ def verify_installed_asyncio_event_loop(loop_path: str) -> None:
             )
     else:
         event_loop = asyncio.get_running_loop()
-    
+
     loop_class = load_object(loop_path)
     if isinstance(event_loop, loop_class):
         return
-    
+
     installed = (
         f"{event_loop.__class__.__module__}"
         f".{event_loop.__class__.__qualname__}"
@@ -232,10 +231,10 @@ def verify_installed_asyncio_event_loop(loop_path: str) -> None:
 
 def is_reactor_installed() -> bool:
     """Check whether an event loop exists.
-    
+
     In pure asyncio mode, this checks if an event loop is available.
     Kept for API compatibility with Twisted-based code.
-    
+
     Returns:
         True if an event loop exists, False otherwise
     """
@@ -248,10 +247,10 @@ def is_reactor_installed() -> bool:
 
 def is_asyncio_reactor_installed() -> bool:
     """Check whether asyncio is available.
-    
+
     In pure asyncio mode, this always returns True if an event loop exists.
     Kept for API compatibility.
-    
+
     Returns:
         True if an event loop exists, False otherwise
     """
@@ -260,7 +259,7 @@ def is_asyncio_reactor_installed() -> bool:
 
 def is_event_loop_running() -> bool:
     """Check whether an event loop is currently running.
-    
+
     Returns:
         True if an event loop is running, False otherwise
     """

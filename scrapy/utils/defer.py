@@ -8,18 +8,9 @@ from __future__ import annotations
 import asyncio
 import inspect
 from asyncio import Future
-from collections.abc import Awaitable, Coroutine, Iterable, Iterator
+from collections.abc import Awaitable, Coroutine, Iterable
 from functools import wraps
-from typing import (
-    TYPE_CHECKING,
-    Any,
-    Concatenate,
-    Generic,
-    ParamSpec,
-    TypeVar,
-    cast,
-    overload,
-)
+from typing import TYPE_CHECKING, Any, Concatenate, ParamSpec, TypeVar, overload
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Callable
@@ -35,7 +26,7 @@ _DEFER_DELAY = 0.1
 
 async def _defer_sleep() -> None:
     """Delay by _DEFER_DELAY so event loop has a chance to process pending tasks.
-    
+
     It delays by 100ms to allow the event loop to handle other tasks,
     so do not set delay to zero.
     """
@@ -51,23 +42,23 @@ async def parallel(
 ) -> list[_T2]:
     """Execute a callable over the objects in the given iterable, in parallel,
     using no more than ``count`` concurrent calls.
-    
+
     Args:
         iterable: Items to process
         count: Maximum number of concurrent tasks
         callable: Async function to call for each item
         *args: Additional positional arguments
         **named: Additional keyword arguments
-        
+
     Returns:
         List of results from all calls
     """
     semaphore = asyncio.Semaphore(count)
-    
+
     async def _process_item(item: _T) -> _T2:
         async with semaphore:
             return await callable(item, *args, **named)
-    
+
     tasks = [asyncio.create_task(_process_item(item)) for item in iterable]
     return await asyncio.gather(*tasks)
 
@@ -80,39 +71,39 @@ async def parallel_async(
     **named: _P.kwargs,
 ) -> list[_T2]:
     """Like ``parallel`` but for async iterators.
-    
+
     Args:
         async_iterable: Async iterator of items to process
         count: Maximum number of concurrent tasks
         callable: Async function to call for each item
         *args: Additional positional arguments
         **named: Additional keyword arguments
-        
+
     Returns:
         List of results from all calls
     """
     semaphore = asyncio.Semaphore(count)
     results: list[_T2] = []
     tasks: set[asyncio.Task[_T2]] = set()
-    
+
     async def _process_item(item: _T) -> _T2:
         async with semaphore:
             return await callable(item, *args, **named)
-    
+
     async for item in async_iterable:
         # If we have too many tasks, wait for some to complete
         while len(tasks) >= count:
             done, tasks = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
             results.extend([task.result() for task in done])
-        
+
         task = asyncio.create_task(_process_item(item))
         tasks.add(task)
-    
+
     # Wait for remaining tasks
     if tasks:
         done_tasks = await asyncio.gather(*tasks)
         results.extend(done_tasks)
-    
+
     return results
 
 
@@ -123,16 +114,16 @@ async def process_chain(
     **kw: Any,
 ) -> Any:
     """Process a chain of async callbacks.
-    
+
     Each callback receives the result of the previous one as its first argument,
     plus any additional args/kwargs.
-    
+
     Args:
         callbacks: Sequence of async functions to call
         input: Initial input value
         *a: Additional positional arguments for each callback
         **kw: Additional keyword arguments for each callback
-        
+
     Returns:
         The final result after all callbacks
     """
@@ -149,13 +140,13 @@ async def process_parallel(
     **kw: _P.kwargs,
 ) -> list[_T2]:
     """Return a list with the output of all successful calls to the given callbacks.
-    
+
     Args:
         callbacks: Sequence of async functions to call
         input: Input value to pass to each callback
         *a: Additional positional arguments for each callback
         **kw: Additional keyword arguments for each callback
-        
+
     Returns:
         List of results from all callbacks
     """
@@ -171,13 +162,13 @@ def iter_errback(
 ) -> Iterable[_T]:
     """Wrap an iterable calling an errback if an error is caught while
     iterating it.
-    
+
     Args:
         iterable: The iterable to wrap
         errback: Function to call with caught exceptions
         *a: Additional positional arguments for errback
         **kw: Additional keyword arguments for errback
-        
+
     Yields:
         Items from the iterable
     """
@@ -199,13 +190,13 @@ async def aiter_errback(
 ) -> AsyncIterator[_T]:
     """Wrap an async iterable calling an errback if an error is caught while
     iterating it. Similar to :func:`scrapy.utils.defer.iter_errback`.
-    
+
     Args:
         aiterable: The async iterable to wrap
         errback: Function to call with caught exceptions
         *a: Additional positional arguments for errback
         **kw: Additional keyword arguments for errback
-        
+
     Yields:
         Items from the async iterable
     """
@@ -230,10 +221,10 @@ def deferred_from_coro(o: _T2) -> _T2: ...
 def deferred_from_coro(o: Awaitable[_T] | _T2) -> Future[_T] | _T2:
     """Convert a coroutine or other awaitable object into a Future,
     or return the object as is if it isn't a coroutine.
-    
+
     Args:
         o: An awaitable object or any other value
-        
+
     Returns:
         A Future if o is awaitable, otherwise o unchanged
     """
@@ -249,14 +240,14 @@ def deferred_f_from_coro_f(
 ) -> Callable[_P, Future[_T]]:
     """Convert a coroutine function into a function that returns a Future.
 
-    The coroutine function will be called at the time when the wrapper is called. 
+    The coroutine function will be called at the time when the wrapper is called.
     Wrapper args will be passed to it.
-    This is useful for callback chains, as callback functions are called with 
+    This is useful for callback chains, as callback functions are called with
     the previous callback result.
-    
+
     Args:
         coro_f: A coroutine function
-        
+
     Returns:
         A function that returns a Future
     """
@@ -272,18 +263,18 @@ def maybeDeferred_coro(
     f: Callable[_P, Any], *args: _P.args, **kw: _P.kwargs
 ) -> Future[Any]:
     """Call a function and ensure the result is a Future.
-    
+
     Handles functions that return:
     - Futures (returned as-is)
     - Awaitables (converted to Future)
     - Regular values (wrapped in a completed Future)
     - Exceptions (wrapped in a failed Future)
-    
+
     Args:
         f: The function to call
         *args: Positional arguments for the function
         **kw: Keyword arguments for the function
-        
+
     Returns:
         A Future representing the result
     """
@@ -302,7 +293,7 @@ def maybeDeferred_coro(
         future = asyncio.Future()
         future.set_exception(result)
         return future
-    
+
     future = asyncio.Future()
     future.set_result(result)
     return future
@@ -310,13 +301,13 @@ def maybeDeferred_coro(
 
 def deferred_to_future(d: Future[_T]) -> Future[_T]:
     """Return an :class:`asyncio.Future` object.
-    
+
     In pure asyncio, this is a no-op that just returns the Future as-is.
     This function exists for API compatibility.
 
     Args:
         d: A Future object
-        
+
     Returns:
         The same Future object
     """
@@ -325,13 +316,13 @@ def deferred_to_future(d: Future[_T]) -> Future[_T]:
 
 def maybe_deferred_to_future(d: Future[_T]) -> Future[_T]:
     """Return *d* as an awaitable Future.
-    
+
     In pure asyncio, this is a no-op that just returns the Future as-is.
     This function exists for API compatibility.
 
     Args:
         d: A Future object
-        
+
     Returns:
         The same Future object
     """
@@ -345,7 +336,7 @@ def _schedule_coro(coro: Coroutine[Any, Any, Any]) -> None:
     alternative is calling :func:`asyncio.create_task` or
     :func:`scrapy.utils.defer.deferred_from_coro`,
     keeping the result, and adding proper exception handling to it.
-    
+
     Args:
         coro: The coroutine to schedule
     """
@@ -365,12 +356,12 @@ def ensure_awaitable(o: _T | Awaitable[_T]) -> Awaitable[_T]:
     """Convert any value to an awaitable object.
 
     For a :class:`asyncio.Future` object, return it as-is.
-    For an awaitable object of a different type, return it as is. 
+    For an awaitable object of a different type, return it as is.
     For any other value, return a coroutine that completes with that value.
-    
+
     Args:
         o: Any value or awaitable
-        
+
     Returns:
         An awaitable object
     """
