@@ -12,7 +12,6 @@ from unittest import mock
 
 import pytest
 from testfixtures import LogCapture
-from twisted.internet.defer import inlineCallbacks
 from w3lib.url import safe_url_string
 
 from scrapy import signals
@@ -96,8 +95,7 @@ class TestSpider:
         assert settings.get("TEST2") == "spider"
         assert settings.get("TEST3") == "project"
 
-    @inlineCallbacks
-    def test_settings_in_from_crawler(self):
+    async def test_settings_in_from_crawler(self):
         spider_settings = {"TEST1": "spider", "TEST2": "spider"}
         project_settings = {
             "TEST1": "project",
@@ -119,7 +117,7 @@ class TestSpider:
         assert crawler.settings.get("TEST1") == "spider"
         assert crawler.settings.get("TEST2") == "spider"
         assert crawler.settings.get("TEST3") == "project"
-        yield crawler.crawl()
+        await crawler.crawl()
         assert crawler.settings.get("TEST1") == "spider_instance"
 
     def test_logger(self):
@@ -459,15 +457,14 @@ class TestCrawlSpider(TestSpider):
         assert hasattr(spider, "_follow_links")
         assert not spider._follow_links
 
-    @inlineCallbacks
-    def test_start_url(self):
+    async def test_start_url(self):
         class TestSpider(self.spider_class):
             name = "test"
             start_url = "https://www.example.com"
 
         crawler = get_crawler(TestSpider)
         with LogCapture("scrapy.core.engine", propagate=False, level=ERROR) as log:
-            yield crawler.crawl()
+            await crawler.crawl()
         assert "Error while reading start items and requests" in str(log)
         assert "did you miss an 's'?" in str(log)
 
