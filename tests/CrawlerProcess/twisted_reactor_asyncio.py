@@ -6,10 +6,6 @@ class AsyncioReactorSpider(scrapy.Spider):
     name = "asyncio_reactor"
 
 
-process = CrawlerProcess(
-    settings={
-        "TWISTED_REACTOR": "twisted.internet.asyncioreactor.AsyncioSelectorReactor",
-    }
-)
+process = CrawlerProcess(settings={})
 process.crawl(AsyncioReactorSpider)
 process.start()

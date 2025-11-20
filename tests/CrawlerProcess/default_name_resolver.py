@@ -4,7 +4,7 @@ from scrapy.crawler import CrawlerProcess
 
 class IPv6Spider(scrapy.Spider):
     """
-    Raises a twisted.internet.error.DNSLookupError:
+    Raises a DNSLookupError:
     the default name resolver does not handle IPv6 addresses.
     """
 

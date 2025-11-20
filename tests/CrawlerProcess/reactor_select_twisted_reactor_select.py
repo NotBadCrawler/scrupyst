@@ -1,9 +1,5 @@
-from twisted.internet import selectreactor
-
 import scrapy
 from scrapy.crawler import CrawlerProcess
-
-selectreactor.install()
 
 
 class NoRequestsSpider(scrapy.Spider):
@@ -14,11 +10,7 @@ class NoRequestsSpider(scrapy.Spider):
         yield
 
 
-process = CrawlerProcess(
-    settings={
-        "TWISTED_REACTOR": "twisted.internet.selectreactor.SelectReactor",
-    }
-)
+process = CrawlerProcess(settings={})
 
 process.crawl(NoRequestsSpider)
 process.start()
