@@ -7,6 +7,11 @@ from scrapy.core.downloader.handlers.http11_aiohttp import (
 )
 
 
+class TunnelError(Exception):
+    """Error raised when HTTP tunnel connection fails (CONNECT method)"""
+    pass
+
+
 class HTTP11DownloadHandler(AiohttpHTTP11DownloadHandler):
     """HTTP/1.1 download handler using aiohttp (compatibility wrapper)"""
 
@@ -20,4 +25,5 @@ HTTPDownloadHandler = HTTP11DownloadHandler
 __all__ = [
     "HTTP11DownloadHandler",
     "HTTPDownloadHandler",
+    "TunnelError",
 ]
