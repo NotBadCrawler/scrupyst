@@ -20,6 +20,9 @@ if TYPE_CHECKING:
 _T = TypeVar("_T")
 _P = ParamSpec("_P")
 
+# Constant for asyncio reactor path (for backward compatibility)
+_asyncio_reactor_path = "asyncio"
+
 
 async def listen_tcp(
     portrange: list[int], host: str, protocol_factory: Callable[[], asyncio.Protocol]
