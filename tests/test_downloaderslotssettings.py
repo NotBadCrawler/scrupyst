@@ -1,6 +1,6 @@
 import time
 
-from twisted.internet.defer import inlineCallbacks
+import pytest
 
 from scrapy import Request
 from scrapy.core.downloader import Downloader, Slot
@@ -62,10 +62,10 @@ class TestCrawl:
     def setup_method(self):
         self.runner = CrawlerRunner()
 
-    @inlineCallbacks
-    def test_delay(self):
+    @pytest.mark.asyncio
+    async def test_delay(self):
         crawler = get_crawler(DownloaderSlotsSettingsTestSpider)
-        yield crawler.crawl(mockserver=self.mockserver)
+        await crawler.crawl(mockserver=self.mockserver)
         slots = crawler.engine.downloader.slots
         times = crawler.spider.times
         tolerance = 0.3

@@ -2,17 +2,6 @@ import logging
 
 import pytest
 from testfixtures import LogCapture
-from twisted.internet import defer
-from twisted.internet.error import (
-    ConnectError,
-    ConnectionDone,
-    ConnectionLost,
-    DNSLookupError,
-    TCPTimedOutError,
-)
-from twisted.internet.error import ConnectionRefusedError as TxConnectionRefusedError
-from twisted.internet.error import TimeoutError as TxTimeoutError
-from twisted.web.client import ResponseFailed
 
 from scrapy.downloadermiddlewares.retry import RetryMiddleware, get_retry_request
 from scrapy.exceptions import IgnoreRequest
@@ -21,6 +10,24 @@ from scrapy.settings.default_settings import RETRY_EXCEPTIONS
 from scrapy.spiders import Spider
 from scrapy.utils.spider import DefaultSpider
 from scrapy.utils.test import get_crawler
+
+# Twisted error imports for backward compatibility testing
+# These are only used if Twisted is installed
+try:
+    from twisted.internet import defer
+    from twisted.internet.error import (
+        ConnectError,
+        ConnectionDone,
+        ConnectionLost,
+        DNSLookupError,
+        TCPTimedOutError,
+    )
+    from twisted.internet.error import ConnectionRefusedError as TxConnectionRefusedError
+    from twisted.internet.error import TimeoutError as TxTimeoutError
+    from twisted.web.client import ResponseFailed
+    HAS_TWISTED = True
+except ImportError:
+    HAS_TWISTED = False
 
 
 class TestRetry:
@@ -89,6 +96,7 @@ class TestRetry:
         )
         assert self.crawler.stats.get_value("retry/count") == 2
 
+    @pytest.mark.skipif(not HAS_TWISTED, reason="Twisted not installed")
     def test_twistederrors(self):
         exceptions = [
             ConnectError,
