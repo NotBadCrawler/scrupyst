@@ -9,7 +9,6 @@ from scrapy.pipelines import ItemPipelineManager
 from scrapy.utils.asyncio import call_later
 from scrapy.utils.conf import build_component_list
 from scrapy.utils.defer import (
-    deferred_f_from_coro_f,
     deferred_to_future,
     maybe_deferred_to_future,
 )
@@ -146,7 +145,7 @@ class TestPipeline:
         await crawler.crawl(mockserver=self.mockserver)
         assert len(self.items) == 1
 
-    @deferred_f_from_coro_f
+    @pytest.mark.asyncio
     async def test_deprecated_spider_arg(self, mockserver: MockServer) -> None:
         crawler = self._create_crawler(DeprecatedSpiderArgPipeline)
         with (
@@ -183,7 +182,7 @@ class TestCustomPipelineManager:
         ):
             itemproc.process_item({}, crawler.spider)
 
-    @deferred_f_from_coro_f
+    @pytest.mark.asyncio
     async def test_integration_recommended(self, mockserver: MockServer) -> None:
         class CustomPipelineManager(ItemPipelineManager):
             async def process_item_async(self, item):
@@ -209,7 +208,7 @@ class TestCustomPipelineManager:
 
         assert len(items) == 1
 
-    @deferred_f_from_coro_f
+    @pytest.mark.asyncio
     async def test_integration_no_async_subclass(self, mockserver: MockServer) -> None:
         class CustomPipelineManager(ItemPipelineManager):
             def open_spider(self, spider):
@@ -267,7 +266,7 @@ class TestCustomPipelineManager:
 
         assert len(items) == 1
 
-    @deferred_f_from_coro_f
+    @pytest.mark.asyncio
     async def test_integration_no_async_not_subclass(
         self, mockserver: MockServer
     ) -> None:
@@ -345,7 +344,7 @@ class TestMiddlewareManagerSpider:
     def crawler(self) -> Crawler:
         return get_crawler(Spider)
 
-    @deferred_f_from_coro_f
+    @pytest.mark.asyncio
     async def test_deprecated_spider_arg_no_crawler_spider(
         self, crawler: Crawler
     ) -> None:
@@ -445,7 +444,7 @@ class TestMiddlewareManagerSpider:
         ):
             mwman.close_spider(spider)
 
-    @deferred_f_from_coro_f
+    @pytest.mark.asyncio
     async def test_no_spider_arg_without_crawler(self) -> None:
         """If no crawler and no spider arg, raise an error."""
         with pytest.warns(

@@ -16,7 +16,7 @@ from scrapy.crawler import CrawlerRunner
 from scrapy.exceptions import CloseSpider, StopDownload
 from scrapy.http import Request
 from scrapy.http.response import Response
-from scrapy.utils.defer import Failure, deferred_f_from_coro_f, maybe_deferred_to_future
+from scrapy.utils.defer import Failure, maybe_deferred_to_future
 from scrapy.utils.engine import format_engine_status, get_engine_status
 from scrapy.utils.python import to_unicode
 from scrapy.utils.test import get_crawler, get_reactor_settings
@@ -76,11 +76,11 @@ class TestCrawl:
         await crawler.crawl(mockserver=self.mockserver)
         assert len(crawler.spider.urls_visited) == 11  # 10 + start_url
 
-    @deferred_f_from_coro_f
+    @pytest.mark.asyncio
     async def test_fixed_delay(self):
         await self._test_delay(total=3, delay=0.2)
 
-    @deferred_f_from_coro_f
+    @pytest.mark.asyncio
     async def test_randomized_delay(self):
         await self._test_delay(total=3, delay=0.1, randomize=True)
 
@@ -528,7 +528,7 @@ class TestCrawlSpider:
         assert "Got response 200" in str(log)
 
     @pytest.mark.only_asyncio
-    @deferred_f_from_coro_f
+    @pytest.mark.asyncio
     async def test_async_def_asyncio_parse_items_list(self):
         log, items, _ = await self._run_spider(AsyncDefAsyncioReturnSpider)
         assert "Got response 200" in str(log)
@@ -553,7 +553,7 @@ class TestCrawlSpider:
         assert {"foo": 42} in items
 
     @pytest.mark.only_asyncio
-    @deferred_f_from_coro_f
+    @pytest.mark.asyncio
     async def test_async_def_asyncgen_parse(self):
         log, _, stats = await self._run_spider(AsyncDefAsyncioGenSpider)
         assert "Got response 200" in str(log)
@@ -561,7 +561,7 @@ class TestCrawlSpider:
         assert itemcount == 1
 
     @pytest.mark.only_asyncio
-    @deferred_f_from_coro_f
+    @pytest.mark.asyncio
     async def test_async_def_asyncgen_parse_loop(self):
         log, items, stats = await self._run_spider(AsyncDefAsyncioGenLoopSpider)
         assert "Got response 200" in str(log)
@@ -571,7 +571,7 @@ class TestCrawlSpider:
             assert {"foo": i} in items
 
     @pytest.mark.only_asyncio
-    @deferred_f_from_coro_f
+    @pytest.mark.asyncio
     async def test_async_def_asyncgen_parse_exc(self):
         log, items, stats = await self._run_spider(AsyncDefAsyncioGenExcSpider)
         log = str(log)
@@ -583,7 +583,7 @@ class TestCrawlSpider:
             assert {"foo": i} in items
 
     @pytest.mark.only_asyncio
-    @deferred_f_from_coro_f
+    @pytest.mark.asyncio
     async def test_async_def_asyncgen_parse_complex(self):
         _, items, stats = await self._run_spider(AsyncDefAsyncioGenComplexSpider)
         itemcount = stats.get_value("item_scraped_count")
@@ -595,25 +595,25 @@ class TestCrawlSpider:
             assert {"index2": i} in items
 
     @pytest.mark.only_asyncio
-    @deferred_f_from_coro_f
+    @pytest.mark.asyncio
     async def test_async_def_asyncio_parse_reqs_list(self):
         log, *_ = await self._run_spider(AsyncDefAsyncioReqsReturnSpider)
         for req_id in range(3):
             assert f"Got response 200, req_id {req_id}" in str(log)
 
     @pytest.mark.only_not_asyncio
-    @deferred_f_from_coro_f
+    @pytest.mark.asyncio
     async def test_async_def_deferred_direct(self):
         _, items, _ = await self._run_spider(AsyncDefDeferredDirectSpider)
         assert items == [{"code": 200}]
 
     @pytest.mark.only_asyncio
-    @deferred_f_from_coro_f
+    @pytest.mark.asyncio
     async def test_async_def_deferred_wrapped(self):
         _, items, _ = await self._run_spider(AsyncDefDeferredWrappedSpider)
         assert items == [{"code": 200}]
 
-    @deferred_f_from_coro_f
+    @pytest.mark.asyncio
     async def test_async_def_deferred_maybe_wrapped(self):
         _, items, _ = await self._run_spider(AsyncDefDeferredMaybeWrappedSpider)
         assert items == [{"code": 200}]
