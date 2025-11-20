@@ -6,7 +6,6 @@ from typing import TYPE_CHECKING
 from unittest import mock
 
 import pytest
-from twisted.internet.defer import Deferred
 
 from scrapy.utils.asyncgen import as_async_generator
 from scrapy.utils.asyncio import (
@@ -21,12 +20,11 @@ if TYPE_CHECKING:
 
 
 class TestAsyncio:
-    def test_is_asyncio_available(self, reactor_pytest: str) -> None:
-        # the result should depend only on the pytest --reactor argument
-        assert is_asyncio_available() == (reactor_pytest == "asyncio")
+    def test_is_asyncio_available(self) -> None:
+        # After asyncio migration, this should always return True
+        assert is_asyncio_available() is True
 
 
-@pytest.mark.only_asyncio
 class TestParallelAsyncio:
     """Test for scrapy.utils.asyncio.parallel_asyncio(), based on tests.test_utils_defer.TestParallelAsync."""
 
@@ -137,7 +135,8 @@ class TestAsyncioLoopingCall:
         assert not looping_call.running
 
     def test_looping_call_bad_function(self):
-        looping_call = AsyncioLoopingCall(Deferred)
+        # Test with a non-async callable (should raise TypeError)
+        looping_call = AsyncioLoopingCall(lambda: None)  # sync function, not async
         with pytest.raises(TypeError):
             looping_call.start(0.1)
         assert not looping_call.running
