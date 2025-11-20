@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import bz2
 import csv
 import gzip
@@ -29,8 +30,6 @@ import lxml.etree
 import pytest
 from packaging.version import Version
 from testfixtures import LogCapture
-from twisted.internet import defer
-from twisted.internet.defer import inlineCallbacks
 from w3lib.url import file_uri_to_path, path_to_file_uri
 from zope.interface import implementer
 from zope.interface.verify import verifyObject
@@ -1003,8 +1002,8 @@ class TestFeedExport(TestFeedExportBase):
         result = self._load_until_eof(data["marshal"], load_func=marshal.load)
         assert result == expected
 
-    @inlineCallbacks
-    def test_stats_file_success(self):
+    @pytest.mark.asyncio
+    async def test_stats_file_success(self):
         settings = {
             "FEEDS": {
                 printf_escape(path_to_url(str(self._random_temp_filename()))): {
@@ -1013,12 +1012,12 @@ class TestFeedExport(TestFeedExportBase):
             },
         }
         crawler = get_crawler(ItemSpider, settings)
-        yield crawler.crawl(mockserver=self.mockserver)
+        await crawler.crawl(mockserver=self.mockserver)
         assert "feedexport/success_count/FileFeedStorage" in crawler.stats.get_stats()
         assert crawler.stats.get_value("feedexport/success_count/FileFeedStorage") == 1
 
-    @inlineCallbacks
-    def test_stats_file_failed(self):
+    @pytest.mark.asyncio
+    async def test_stats_file_failed(self):
         settings = {
             "FEEDS": {
                 printf_escape(path_to_url(str(self._random_temp_filename()))): {
@@ -1031,12 +1030,12 @@ class TestFeedExport(TestFeedExportBase):
             "scrapy.extensions.feedexport.FileFeedStorage.store",
             side_effect=KeyError("foo"),
         ):
-            yield crawler.crawl(mockserver=self.mockserver)
+            await crawler.crawl(mockserver=self.mockserver)
         assert "feedexport/failed_count/FileFeedStorage" in crawler.stats.get_stats()
         assert crawler.stats.get_value("feedexport/failed_count/FileFeedStorage") == 1
 
-    @inlineCallbacks
-    def test_stats_multiple_file(self):
+    @pytest.mark.asyncio
+    async def test_stats_multiple_file(self):
         settings = {
             "FEEDS": {
                 printf_escape(path_to_url(str(self._random_temp_filename()))): {
@@ -1049,7 +1048,7 @@ class TestFeedExport(TestFeedExportBase):
         }
         crawler = get_crawler(ItemSpider, settings)
         with mock.patch.object(S3FeedStorage, "store"):
-            yield crawler.crawl(mockserver=self.mockserver)
+            await crawler.crawl(mockserver=self.mockserver)
         assert "feedexport/success_count/FileFeedStorage" in crawler.stats.get_stats()
         assert "feedexport/success_count/StdoutFeedStorage" in crawler.stats.get_stats()
         assert crawler.stats.get_value("feedexport/success_count/FileFeedStorage") == 1
@@ -2677,8 +2676,8 @@ class TestBatchDeliveries(TestFeedExportBase):
         data = await self.exported_data(items, settings)
         assert len(items) == len(data["json"])
 
-    @inlineCallbacks
-    def test_stats_batch_file_success(self):
+    @pytest.mark.asyncio
+    async def test_stats_batch_file_success(self):
         settings = {
             "FEEDS": {
                 build_url(
@@ -2690,13 +2689,13 @@ class TestBatchDeliveries(TestFeedExportBase):
             "FEED_EXPORT_BATCH_ITEM_COUNT": 1,
         }
         crawler = get_crawler(ItemSpider, settings)
-        yield crawler.crawl(total=2, mockserver=self.mockserver)
+        await crawler.crawl(total=2, mockserver=self.mockserver)
         assert "feedexport/success_count/FileFeedStorage" in crawler.stats.get_stats()
         assert crawler.stats.get_value("feedexport/success_count/FileFeedStorage") == 12
 
     @pytest.mark.requires_boto3
-    @inlineCallbacks
-    def test_s3_export(self):
+    @pytest.mark.asyncio
+    async def test_s3_export(self):
         bucket = "mybucket"
         items = [
             self.MyItem({"foo": "bar1", "egg": "spam1"}),
@@ -2757,7 +2756,7 @@ class TestBatchDeliveries(TestFeedExportBase):
 
         TestSpider.start_urls = [self.mockserver.url("/")]
         crawler = get_crawler(TestSpider, settings)
-        yield crawler.crawl()
+        await crawler.crawl()
 
         assert len(CustomS3FeedStorage.stubs) == len(items)
         for stub in CustomS3FeedStorage.stubs[:-1]:
@@ -2788,16 +2787,16 @@ class TestFeedExporterSignals:
         self.feed_slot_closed_received = True
 
     def feed_exporter_closed_signal_handler_deferred(self):
-        d = defer.Deferred()
-        d.addCallback(lambda _: setattr(self, "feed_exporter_closed_received", True))
-        d.callback(None)
-        return d
+        f = asyncio.Future()
+        f.add_done_callback(lambda _: setattr(self, "feed_exporter_closed_received", True))
+        f.set_result(None)
+        return f
 
     def feed_slot_closed_signal_handler_deferred(self, slot):
-        d = defer.Deferred()
-        d.addCallback(lambda _: setattr(self, "feed_slot_closed_received", True))
-        d.callback(None)
-        return d
+        f = asyncio.Future()
+        f.add_done_callback(lambda _: setattr(self, "feed_slot_closed_received", True))
+        f.set_result(None)
+        return f
 
     def run_signaled_feed_exporter(
         self, feed_exporter_signal_handler, feed_slot_signal_handler
@@ -2816,7 +2815,7 @@ class TestFeedExporterSignals:
         feed_exporter.open_spider(spider)
         for item in self.items:
             feed_exporter.item_scraped(item, spider)
-        defer.ensureDeferred(feed_exporter.close_spider(spider))
+        asyncio.ensure_future(feed_exporter.close_spider(spider))
 
     def test_feed_exporter_signals_sent(self):
         self.feed_exporter_closed_received = False

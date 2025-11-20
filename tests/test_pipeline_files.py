@@ -18,7 +18,6 @@ from urllib.parse import urlparse
 import attr
 import pytest
 from itemadapter import ItemAdapter
-from twisted.internet.defer import inlineCallbacks
 
 from scrapy.exceptions import NotConfigured
 from scrapy.http import Request, Response
@@ -160,8 +159,8 @@ class TestFilesPipeline:
         fullpath = Path(self.tempdir, "some", "image", "key.jpg")
         assert self.pipeline.store._get_filesystem_path(path) == fullpath
 
-    @inlineCallbacks
-    def test_file_not_expired(self):
+    @pytest.mark.asyncio
+    async def test_file_not_expired(self):
         item_url = "http://example.com/file.pdf"
         item = _create_item_with_files(item_url)
         patchers = [
@@ -180,15 +179,15 @@ class TestFilesPipeline:
         for p in patchers:
             p.start()
 
-        result = yield self.pipeline.process_item(item)
+        result = await self.pipeline.process_item(item)
         assert result["files"][0]["checksum"] == "abc"
         assert result["files"][0]["status"] == "uptodate"
 
         for p in patchers:
             p.stop()
 
-    @inlineCallbacks
-    def test_file_expired(self):
+    @pytest.mark.asyncio
+    async def test_file_expired(self):
         item_url = "http://example.com/file2.pdf"
         item = _create_item_with_files(item_url)
         patchers = [
@@ -211,15 +210,15 @@ class TestFilesPipeline:
         for p in patchers:
             p.start()
 
-        result = yield self.pipeline.process_item(item)
+        result = await self.pipeline.process_item(item)
         assert result["files"][0]["checksum"] != "abc"
         assert result["files"][0]["status"] == "downloaded"
 
         for p in patchers:
             p.stop()
 
-    @inlineCallbacks
-    def test_file_cached(self):
+    @pytest.mark.asyncio
+    async def test_file_cached(self):
         item_url = "http://example.com/file3.pdf"
         item = _create_item_with_files(item_url)
         patchers = [
@@ -242,7 +241,7 @@ class TestFilesPipeline:
         for p in patchers:
             p.start()
 
-        result = yield self.pipeline.process_item(item)
+        result = await self.pipeline.process_item(item)
         assert result["files"][0]["checksum"] != "abc"
         assert result["files"][0]["status"] == "cached"
 
@@ -562,8 +561,8 @@ class TestFilesPipelineCustomSettings:
 
 @pytest.mark.requires_botocore
 class TestS3FilesStore:
-    @inlineCallbacks
-    def test_persist(self):
+    @pytest.mark.asyncio
+    async def test_persist(self):
         bucket = "mybucket"
         key = "export.csv"
         uri = f"s3://{bucket}/{key}"
@@ -590,7 +589,7 @@ class TestS3FilesStore:
                 service_response={},
             )
 
-            yield store.persist_file(
+            await store.persist_file(
                 path,
                 buffer,
                 info=None,
@@ -602,8 +601,8 @@ class TestS3FilesStore:
             # The call to read does not happen with Stubber
             assert buffer.method_calls == [mock.call.seek(0)]
 
-    @inlineCallbacks
-    def test_stat(self):
+    @pytest.mark.asyncio
+    async def test_stat(self):
         bucket = "mybucket"
         key = "export.csv"
         uri = f"s3://{bucket}/{key}"
@@ -626,7 +625,7 @@ class TestS3FilesStore:
                 },
             )
 
-            file_stats = yield store.stat_file("", info=None)
+            file_stats = await store.stat_file("", info=None)
             assert file_stats == {
                 "checksum": checksum,
                 "last_modified": last_modified.timestamp(),
@@ -639,8 +638,8 @@ class TestS3FilesStore:
     "GCS_PROJECT_ID" not in os.environ, reason="GCS_PROJECT_ID not found"
 )
 class TestGCSFilesStore:
-    @inlineCallbacks
-    def test_persist(self):
+    @pytest.mark.asyncio
+    async def test_persist(self):
         uri = os.environ.get("GCS_TEST_FILE_URI")
         if not uri:
             pytest.skip("No GCS URI available for testing")
@@ -651,8 +650,8 @@ class TestGCSFilesStore:
         store = GCSFilesStore(uri)
         store.POLICY = "authenticatedRead"
         expected_policy = {"role": "READER", "entity": "allAuthenticatedUsers"}
-        yield store.persist_file(path, buf, info=None, meta=meta, headers=None)
-        s = yield store.stat_file(path, info=None)
+        await store.persist_file(path, buf, info=None, meta=meta, headers=None)
+        s = await store.stat_file(path, info=None)
         assert "last_modified" in s
         assert "checksum" in s
         assert s["checksum"] == "cdcda85605e46d0af6110752770dce3c"
@@ -664,8 +663,8 @@ class TestGCSFilesStore:
         assert blob.content_type == "application/octet-stream"
         assert expected_policy in acl
 
-    @inlineCallbacks
-    def test_blob_path_consistency(self):
+    @pytest.mark.asyncio
+    async def test_blob_path_consistency(self):
         """Test to make sure that paths used to store files is the same as the one used to get
         already uploaded files.
         """
@@ -681,28 +680,28 @@ class TestGCSFilesStore:
             store = GCSFilesStore(uri)
             store.bucket = mock.Mock()
             path = "full/my_data.txt"
-            yield store.persist_file(
+            await store.persist_file(
                 path, mock.Mock(), info=None, meta=None, headers=None
             )
-            yield store.stat_file(path, info=None)
+            await store.stat_file(path, info=None)
             expected_blob_path = store.prefix + path
             store.bucket.blob.assert_called_with(expected_blob_path)
             store.bucket.get_blob.assert_called_with(expected_blob_path)
 
 
 class TestFTPFileStore:
-    @inlineCallbacks
-    def test_persist(self):
+    @pytest.mark.asyncio
+    async def test_persist(self):
         data = b"TestFTPFilesStore: \xe2\x98\x83"
         buf = BytesIO(data)
         meta = {"foo": "bar"}
         path = "full/filename"
         with MockFTPServer() as ftp_server:
             store = FTPFilesStore(ftp_server.url("/"))
-            empty_dict = yield store.stat_file(path, info=None)
+            empty_dict = await store.stat_file(path, info=None)
             assert empty_dict == {}
-            yield store.persist_file(path, buf, info=None, meta=meta, headers=None)
-            stat = yield store.stat_file(path, info=None)
+            await store.persist_file(path, buf, info=None, meta=meta, headers=None)
+            stat = await store.stat_file(path, info=None)
             assert "last_modified" in stat
             assert "checksum" in stat
             assert stat["checksum"] == "d113d66b2ec7258724a268bd88eef6b6"
