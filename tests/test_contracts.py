@@ -1,8 +1,6 @@
 from unittest import TextTestResult
 
 import pytest
-from twisted.internet.defer import inlineCallbacks
-from twisted.python import failure
 
 from scrapy import FormRequest
 from scrapy.contracts import Contract, ContractsManager
@@ -17,6 +15,7 @@ from scrapy.http import Request
 from scrapy.item import Field, Item
 from scrapy.spidermiddlewares.httperror import HttpError
 from scrapy.spiders import Spider
+from scrapy.utils.defer import Failure
 from scrapy.utils.test import get_crawler
 from tests.mockserver.http import MockServer
 
@@ -493,7 +492,7 @@ class TestContractsManager:
         try:
             raise HttpError(response, "Ignoring non-200 response")
         except HttpError:
-            failure_mock = failure.Failure()
+            failure_mock = Failure()
 
         request = self.conman.from_method(spider.returns_request, self.results)
         request.errback(failure_mock)
@@ -501,8 +500,8 @@ class TestContractsManager:
         assert not self.results.failures
         assert self.results.errors
 
-    @inlineCallbacks
-    def test_same_url(self):
+    @pytest.mark.asyncio
+    async def test_same_url(self):
         class TestSameUrlSpider(Spider):
             name = "test_same_url"
 
@@ -529,7 +528,7 @@ class TestContractsManager:
             TestSameUrlSpider.parse_second.__doc__ = contract_doc
 
             crawler = get_crawler(TestSameUrlSpider)
-            yield crawler.crawl()
+            await crawler.crawl()
 
         assert crawler.spider.visited == 2
 

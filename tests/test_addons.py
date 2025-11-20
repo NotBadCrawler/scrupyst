@@ -2,7 +2,7 @@ import itertools
 from typing import Any
 from unittest.mock import patch
 
-from twisted.internet.defer import inlineCallbacks
+import pytest
 
 from scrapy import Spider
 from scrapy.crawler import Crawler, CrawlerRunner
@@ -183,8 +183,8 @@ class TestAddonManager:
                 extra={"crawler": crawler},
             )
 
-    @inlineCallbacks
-    def test_enable_addon_in_spider(self):
+    @pytest.mark.asyncio
+    async def test_enable_addon_in_spider(self):
         class MySpider(Spider):
             name = "myspider"
 
@@ -202,5 +202,5 @@ class TestAddonManager:
         runner = CrawlerRunner(settings)
         crawler = runner.create_crawler(MySpider)
         assert crawler.settings.get("KEY") == "default"
-        yield crawler.crawl()
+        await crawler.crawl()
         assert crawler.settings.get("KEY") == "addon"
