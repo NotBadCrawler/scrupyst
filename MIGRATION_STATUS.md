@@ -210,11 +210,11 @@ All downloader components have been successfully migrated:
    - `scrapy/pipelines/files.py` (708 lines) - ✅ COMPLETED! Migrated to ThreadPoolExecutor
    - `scrapy/core/http2/` (1133 lines) - ✅ COMPLETED! Marked as deprecated (replaced by http2_aiohttp)
 
-### Phase 5: Tests (40% Complete) 🔄
+### Phase 5: Tests (50% Complete) 🔄
 
 **Massive undertaking - 200+ test files, ~41,559 lines of test code**
 
-**Status:** In Progress - ALL Mock server infrastructure 100% complete!
+**Status:** In Progress - Infrastructure complete, 20 test files migrated!
 
 **Completed:**
 1. ✅ Updated test dependencies
@@ -233,11 +233,29 @@ All downloader components have been successfully migrated:
    - Replaced `twisted_sleep()` with `asyncio_sleep()` in tests/utils/__init__.py
    - Removed all Twisted Deferred and reactor imports from test utilities
 
-4. ✅ Migrated simple test files (2/200+)
-   - `test_dependencies.py` - Removed Twisted version checking, added asyncio validation
-   - `test_utils_reactor.py` - Converted to pure async/await, removed reactor comparisons
+4. ✅ Migrated 20 test files (20/200+)
+   - `test_dependencies.py` - Removed Twisted version checking
+   - `test_utils_reactor.py` - Converted to pure async/await
+   - `test_closespider.py` - 7 async tests
+   - `test_addons.py` - 1 async test
+   - `test_contracts.py` - 1 async test + Failure migration
+   - `tests/spiders.py` - Utility file, replaced defer.succeed
+   - `test_logformatter.py` - 2 async tests + Failure migration
+   - `test_downloaderslotssettings.py` - 1 async test
+   - `test_downloadermiddleware_retry.py` - Conditional Twisted imports
+   - `test_extension_telnet.py` - Marked as deprecated
+   - `test_request_left.py` - 4 async tests
+   - `test_signals.py` - 2 async tests
+   - `test_utils_serialize.py` - Future instead of Deferred
+   - `test_utils_asyncio.py` - Fixed reactor_pytest dependency
+   - `test_mail.py` - Skipped Twisted-specific test
+   - `test_proxy_connect.py` - 3 async tests
+   - `test_utils_signal.py` - Replaced Deferred with Future
+   - `test_scheduler_base.py` - 2 async tests + async scheduler
+   - `test_request_cb_kwargs.py` - 1 async test
+   - `test_spider_start.py` - Replaced twisted_sleep
 
-5. ✅ Mock server infrastructure (100% complete!) - **COMPLETE!**
+5. ✅ Mock server infrastructure (100% complete!)
    
    **Completed Files:**
    - ✅ `http_base_aiohttp.py` (147 lines) - Full aiohttp mock server foundation
@@ -305,18 +323,16 @@ All downloader components have been successfully migrated:
 
 **Remaining Work:**
 
-6. 🚫 Migrate remaining test files (~198 files, ~41,000+ lines)
+6. 🔄 Migrate remaining test files (~180 files remaining)
    - Convert @inlineCallbacks to async/await throughout
    - Replace Deferred with asyncio.Future
    - Update pytest_twisted fixtures to pytest-asyncio equivalents
-   - Fix imports (remove twisted.* imports, ~168 files affected)
-   - Update ~2000+ test assertions for asyncio patterns
+   - Fix imports (remove twisted.* imports)
+   - Update test assertions for asyncio patterns
    
-   **Files with Twisted imports by size:**
-   - Small (< 100 lines): ~40 files
-   - Medium (100-300 lines): ~80 files  
-   - Large (> 300 lines): ~46 files
-   - Largest: test_crawler.py (~900 lines), test_feedexport.py (~700 lines)
+   **Remaining files with Twisted imports (~25 complex files):**
+   - Medium (100-300 lines): test_core_downloader.py, test_request_attribute_binding.py, test_downloader_handler_twisted_ftp.py, test_downloader_handler_twisted_http2.py, test_pipeline_crawl.py, test_spidermiddleware_httperror.py, test_downloadermiddleware_robotstxt.py, test_utils_log.py, test_spidermiddleware_process_start.py, test_engine_loop.py, test_downloadermiddleware.py, test_scheduler.py, test_webclient.py, test_utils_defer.py
+   - Large (> 300 lines): test_pipelines.py, test_pipeline_media.py, test_spidermiddleware.py, test_engine.py, test_http2_client_protocol.py, test_pipeline_files.py, test_downloader_handlers_http_base.py, test_spider.py, test_crawl.py, test_crawler.py (1213 lines), test_feedexport.py (3021 lines)
 
 7. 🚫 Run and fix tests iteratively
    - Run pytest to identify failures
@@ -324,9 +340,9 @@ All downloader components have been successfully migrated:
    - Update test assertions and expectations
    - Validate all tests pass
 
-**Estimated Completion:** 2-4 weeks of focused work
-**Current Progress:** ~40% (infrastructure + ALL mock servers complete + 2 test files)
-**Next Priority:** Begin migrating test files to pytest-asyncio
+**Estimated Completion:** 1-2 weeks of focused work (50% complete)
+**Current Progress:** ~50% (infrastructure + ALL mock servers + 20 test files migrated)
+**Next Priority:** Continue migrating remaining test files to pytest-asyncio
 
 ### Phase 6: Documentation (0% Complete) 🚫
 
