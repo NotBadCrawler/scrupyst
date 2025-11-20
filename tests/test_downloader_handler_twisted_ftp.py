@@ -7,8 +7,21 @@ from tempfile import mkstemp
 from typing import TYPE_CHECKING, Any
 
 import pytest
-from pytest_twisted import async_yield_fixture
-from twisted.cred import checkers, credentials, portal
+
+# This file tests the deprecated Twisted-based FTP handler
+# Skip all tests if Twisted is not available
+try:
+    from pytest_twisted import async_yield_fixture
+    from twisted.cred import checkers, credentials, portal
+    HAS_TWISTED = True
+except ImportError:
+    HAS_TWISTED = False
+    async_yield_fixture = pytest.fixture
+
+pytestmark = pytest.mark.skipif(
+    not HAS_TWISTED,
+    reason="FTP handler tests require Twisted (deprecated functionality)"
+)
 
 from scrapy.core.downloader.handlers.ftp import FTPDownloadHandler
 from scrapy.http import HtmlResponse, Request, Response

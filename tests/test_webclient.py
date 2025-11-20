@@ -6,15 +6,35 @@ from __future__ import annotations
 
 from urllib.parse import urlparse
 
-import OpenSSL.SSL
 import pytest
-from pytest_twisted import async_yield_fixture
-from twisted.internet import defer
-from twisted.internet.defer import inlineCallbacks
-from twisted.internet.testing import StringTransport
-from twisted.protocols.policies import WrappingFactory
-from twisted.web import resource, server, static, util
-from twisted.web.client import _makeGetterFactory
+
+# This file tests the deprecated webclient module which requires Twisted
+# Skip all tests if Twisted is not available
+try:
+    import OpenSSL.SSL
+    from pytest_twisted import async_yield_fixture
+    from twisted.internet import defer
+    from twisted.internet.defer import inlineCallbacks
+    from twisted.internet.testing import StringTransport
+    from twisted.protocols.policies import WrappingFactory
+    from twisted.web import resource, server, static, util
+    from twisted.web.client import _makeGetterFactory
+    HAS_TWISTED = True
+except ImportError:
+    HAS_TWISTED = False
+    # Provide stub modules for parsing when Twisted not available
+    async_yield_fixture = pytest.fixture
+    def inlineCallbacks(f):  # type: ignore[no-redef,misc]
+        return f
+    class ResourceStub:
+        class Resource:
+            pass
+    resource = ResourceStub()  # type: ignore[assignment]
+
+pytestmark = pytest.mark.skipif(
+    not HAS_TWISTED,
+    reason="webclient tests require Twisted (deprecated functionality)"
+)
 
 from scrapy.core.downloader import webclient as client
 from scrapy.core.downloader.contextfactory import ScrapyClientContextFactory
