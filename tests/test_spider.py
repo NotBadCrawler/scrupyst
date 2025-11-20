@@ -28,7 +28,7 @@ from scrapy.spiders import (
     XMLFeedSpider,
 )
 from scrapy.spiders.init import InitSpider
-from scrapy.utils.defer import deferred_f_from_coro_f, maybe_deferred_to_future
+from scrapy.utils.defer import maybe_deferred_to_future
 from scrapy.utils.test import get_crawler, get_reactor_settings
 from tests import get_testdata, tests_datadir
 
@@ -141,7 +141,7 @@ class TestSpider:
 class TestInitSpider(TestSpider):
     spider_class = InitSpider
 
-    @deferred_f_from_coro_f
+    @pytest.mark.asyncio
     async def test_start_urls(self):
         responses = []
 
@@ -825,7 +825,7 @@ Sitemap: /sitemap-relative-url.xml
             ),
         )
 
-    @deferred_f_from_coro_f
+    @pytest.mark.asyncio
     async def test_sitemap_urls(self):
         class TestSpider(self.spider_class):
             name = "test"

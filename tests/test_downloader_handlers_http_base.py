@@ -44,7 +44,6 @@ from scrapy.http import Headers, HtmlResponse, Request, Response, TextResponse
 from scrapy.spiders import Spider
 from scrapy.utils.asyncio import call_later
 from scrapy.utils.defer import (
-    deferred_f_from_coro_f,
     deferred_from_coro,
     maybe_deferred_to_future,
 )
@@ -100,7 +99,7 @@ class TestHttpBase(ABC):
 
         await close_dh(dh)
 
-    @deferred_f_from_coro_f
+    @pytest.mark.asyncio
     async def test_download(
         self, mockserver: MockServer, download_handler: DownloadHandlerProtocol
     ) -> None:
@@ -108,7 +107,7 @@ class TestHttpBase(ABC):
         response = await download_request(download_handler, request)
         assert response.body == b"Works"
 
-    @deferred_f_from_coro_f
+    @pytest.mark.asyncio
     async def test_download_head(
         self, mockserver: MockServer, download_handler: DownloadHandlerProtocol
     ) -> None:
@@ -126,7 +125,7 @@ class TestHttpBase(ABC):
             if http_status.value == 200 or http_status.value // 100 in (4, 5)
         ],
     )
-    @deferred_f_from_coro_f
+    @pytest.mark.asyncio
     async def test_download_has_correct_http_status_code(
         self,
         mockserver: MockServer,
@@ -139,7 +138,7 @@ class TestHttpBase(ABC):
         response = await download_request(download_handler, request)
         assert response.status == http_status.value
 
-    @deferred_f_from_coro_f
+    @pytest.mark.asyncio
     async def test_server_receives_correct_request_headers(
         self,
         mockserver: MockServer,
@@ -167,7 +166,7 @@ class TestHttpBase(ABC):
             assert header_name in body["headers"]
             assert body["headers"][header_name] == [header_value]
 
-    @deferred_f_from_coro_f
+    @pytest.mark.asyncio
     async def test_server_receives_correct_request_body(
         self,
         mockserver: MockServer,
@@ -185,7 +184,7 @@ class TestHttpBase(ABC):
         body = json.loads(response.body.decode("utf-8"))
         assert json.loads(body["body"]) == request_body
 
-    @deferred_f_from_coro_f
+    @pytest.mark.asyncio
     async def test_download_has_correct_response_headers(
         self,
         mockserver: MockServer,
@@ -225,7 +224,7 @@ class TestHttpBase(ABC):
                 header_value, encoding="utf-8"
             )
 
-    @deferred_f_from_coro_f
+    @pytest.mark.asyncio
     async def test_redirect_status(
         self, mockserver: MockServer, download_handler: DownloadHandlerProtocol
     ) -> None:
@@ -233,7 +232,7 @@ class TestHttpBase(ABC):
         response = await download_request(download_handler, request)
         assert response.status == 302
 
-    @deferred_f_from_coro_f
+    @pytest.mark.asyncio
     async def test_redirect_status_head(
         self, mockserver: MockServer, download_handler: DownloadHandlerProtocol
     ) -> None:
@@ -243,7 +242,7 @@ class TestHttpBase(ABC):
         response = await download_request(download_handler, request)
         assert response.status == 302
 
-    @deferred_f_from_coro_f
+    @pytest.mark.asyncio
     async def test_timeout_download_from_spider_nodata_rcvd(
         self,
         mockserver: MockServer,
@@ -263,7 +262,7 @@ class TestHttpBase(ABC):
         with pytest.raises((defer.TimeoutError, error.TimeoutError)):
             await maybe_deferred_to_future(d)
 
-    @deferred_f_from_coro_f
+    @pytest.mark.asyncio
     async def test_timeout_download_from_spider_server_hangs(
         self,
         mockserver: MockServer,
@@ -285,7 +284,7 @@ class TestHttpBase(ABC):
             await maybe_deferred_to_future(d)
 
     @pytest.mark.parametrize("send_header", [True, False])
-    @deferred_f_from_coro_f
+    @pytest.mark.asyncio
     async def test_host_header(
         self,
         send_header: bool,
@@ -304,7 +303,7 @@ class TestHttpBase(ABC):
         else:
             assert not request.headers
 
-    @deferred_f_from_coro_f
+    @pytest.mark.asyncio
     async def test_content_length_zero_bodyless_post_request_headers(
         self, mockserver: MockServer, download_handler: DownloadHandlerProtocol
     ) -> None:
@@ -324,7 +323,7 @@ class TestHttpBase(ABC):
         response = await download_request(download_handler, request)
         assert response.body == b"0"
 
-    @deferred_f_from_coro_f
+    @pytest.mark.asyncio
     async def test_content_length_zero_bodyless_post_only_one(
         self, mockserver: MockServer, download_handler: DownloadHandlerProtocol
     ) -> None:
@@ -337,7 +336,7 @@ class TestHttpBase(ABC):
         assert len(contentlengths) == 1
         assert contentlengths == [b"0"]
 
-    @deferred_f_from_coro_f
+    @pytest.mark.asyncio
     async def test_payload(
         self, mockserver: MockServer, download_handler: DownloadHandlerProtocol
     ) -> None:
@@ -350,7 +349,7 @@ class TestHttpBase(ABC):
         response = await download_request(download_handler, request)
         assert response.body == body
 
-    @deferred_f_from_coro_f
+    @pytest.mark.asyncio
     async def test_response_header_content_length(
         self, mockserver: MockServer, download_handler: DownloadHandlerProtocol
     ) -> None:
@@ -367,7 +366,7 @@ class TestHttpBase(ABC):
             ("foo", b"<!DOCTYPE html>\n<title>.</title>", HtmlResponse),
         ],
     )
-    @deferred_f_from_coro_f
+    @pytest.mark.asyncio
     async def test_response_class(
         self,
         filename: str,
@@ -382,7 +381,7 @@ class TestHttpBase(ABC):
         response = await download_request(download_handler, request)
         assert type(response) is response_class  # pylint: disable=unidiomatic-typecheck
 
-    @deferred_f_from_coro_f
+    @pytest.mark.asyncio
     async def test_get_duplicate_header(
         self, mockserver: MockServer, download_handler: DownloadHandlerProtocol
     ) -> None:
@@ -390,7 +389,7 @@ class TestHttpBase(ABC):
         response = await download_request(download_handler, request)
         assert response.headers.getlist(b"Set-Cookie") == [b"a=b", b"c=d"]
 
-    @deferred_f_from_coro_f
+    @pytest.mark.asyncio
     async def test_download_is_not_automatically_gzip_decoded(
         self, download_handler: DownloadHandlerProtocol, mockserver: MockServer
     ) -> None:
@@ -423,7 +422,7 @@ class TestHttpBase(ABC):
         expected_decoding = bytes(data, encoding="utf-8")
         assert gzip.decompress(response.body) == expected_decoding
 
-    @deferred_f_from_coro_f
+    @pytest.mark.asyncio
     async def test_no_cookie_processing_or_persistence(
         self, mockserver: MockServer, download_handler: DownloadHandlerProtocol
     ) -> None:
@@ -453,7 +452,7 @@ class TestHttpBase(ABC):
 class TestHttp11Base(TestHttpBase):
     """HTTP 1.1 test case"""
 
-    @deferred_f_from_coro_f
+    @pytest.mark.asyncio
     async def test_download_without_maxsize_limit(
         self, mockserver: MockServer, download_handler: DownloadHandlerProtocol
     ) -> None:
@@ -461,7 +460,7 @@ class TestHttp11Base(TestHttpBase):
         response = await download_request(download_handler, request)
         assert response.body == b"Works"
 
-    @deferred_f_from_coro_f
+    @pytest.mark.asyncio
     async def test_response_class_choosing_request(
         self, mockserver: MockServer, download_handler: DownloadHandlerProtocol
     ) -> None:
@@ -475,7 +474,7 @@ class TestHttp11Base(TestHttpBase):
         response = await download_request(download_handler, request)
         assert type(response) is TextResponse  # pylint: disable=unidiomatic-typecheck
 
-    @deferred_f_from_coro_f
+    @pytest.mark.asyncio
     async def test_download_with_maxsize(
         self, mockserver: MockServer, download_handler: DownloadHandlerProtocol
     ) -> None:
@@ -493,7 +492,7 @@ class TestHttp11Base(TestHttpBase):
                 download_handler, request, Spider("foo", download_maxsize=4)
             )
 
-    @deferred_f_from_coro_f
+    @pytest.mark.asyncio
     async def test_download_with_maxsize_very_large_file(
         self, mockserver: MockServer, download_handler: DownloadHandlerProtocol
     ) -> None:
@@ -519,7 +518,7 @@ class TestHttp11Base(TestHttpBase):
             call_later(0.1, d.callback, logger)
             await maybe_deferred_to_future(d)
 
-    @deferred_f_from_coro_f
+    @pytest.mark.asyncio
     async def test_download_with_maxsize_per_req(
         self, mockserver: MockServer, download_handler: DownloadHandlerProtocol
     ) -> None:
@@ -528,7 +527,7 @@ class TestHttp11Base(TestHttpBase):
         with pytest.raises((defer.CancelledError, error.ConnectionAborted)):
             await download_request(download_handler, request)
 
-    @deferred_f_from_coro_f
+    @pytest.mark.asyncio
     async def test_download_with_small_maxsize_per_spider(
         self, mockserver: MockServer, download_handler: DownloadHandlerProtocol
     ) -> None:
@@ -538,7 +537,7 @@ class TestHttp11Base(TestHttpBase):
                 download_handler, request, Spider("foo", download_maxsize=2)
             )
 
-    @deferred_f_from_coro_f
+    @pytest.mark.asyncio
     async def test_download_with_large_maxsize_per_spider(
         self, mockserver: MockServer, download_handler: DownloadHandlerProtocol
     ) -> None:
@@ -548,7 +547,7 @@ class TestHttp11Base(TestHttpBase):
         )
         assert response.body == b"Works"
 
-    @deferred_f_from_coro_f
+    @pytest.mark.asyncio
     async def test_download_chunked_content(
         self, mockserver: MockServer, download_handler: DownloadHandlerProtocol
     ) -> None:
@@ -557,7 +556,7 @@ class TestHttp11Base(TestHttpBase):
         assert response.body == b"chunked content\n"
 
     @pytest.mark.parametrize("url", ["broken", "broken-chunked"])
-    @deferred_f_from_coro_f
+    @pytest.mark.asyncio
     async def test_download_cause_data_loss(
         self,
         url: str,
@@ -571,7 +570,7 @@ class TestHttp11Base(TestHttpBase):
         assert any(r.check(_DataLoss) for r in exc_info.value.reasons)
 
     @pytest.mark.parametrize("url", ["broken", "broken-chunked"])
-    @deferred_f_from_coro_f
+    @pytest.mark.asyncio
     async def test_download_allow_data_loss(
         self,
         url: str,
@@ -586,7 +585,7 @@ class TestHttp11Base(TestHttpBase):
         assert response.flags == ["dataloss"]
 
     @pytest.mark.parametrize("url", ["broken", "broken-chunked"])
-    @deferred_f_from_coro_f
+    @pytest.mark.asyncio
     async def test_download_allow_data_loss_via_setting(
         self, url: str, mockserver: MockServer
     ) -> None:
@@ -603,7 +602,7 @@ class TestHttp11Base(TestHttpBase):
                 await maybe_deferred_to_future(d)
         assert response.flags == ["dataloss"]
 
-    @deferred_f_from_coro_f
+    @pytest.mark.asyncio
     async def test_protocol(
         self, mockserver: MockServer, download_handler: DownloadHandlerProtocol
     ) -> None:
@@ -622,7 +621,7 @@ class TestHttps11Base(TestHttp11Base):
         'subject "/C=IE/O=Scrapy/CN=localhost"'
     )
 
-    @deferred_f_from_coro_f
+    @pytest.mark.asyncio
     async def test_tls_logging(self, mockserver: MockServer) -> None:
         crawler = get_crawler(
             settings_dict={"DOWNLOADER_CLIENT_TLS_VERBOSE_LOGGING": True}
@@ -682,7 +681,7 @@ class TestSimpleHttpsBase(ABC):
 
         await close_dh(dh)
 
-    @deferred_f_from_coro_f
+    @pytest.mark.asyncio
     async def test_download(
         self, url: str, download_handler: DownloadHandlerProtocol
     ) -> None:
@@ -726,7 +725,7 @@ class TestHttpWithCrawlerBase(ABC):
 
     is_secure = False
 
-    @deferred_f_from_coro_f
+    @pytest.mark.asyncio
     async def test_download_with_content_length(self, mockserver: MockServer) -> None:
         crawler = get_crawler(SingleRequestSpider, self.settings_dict)
         # http://localhost:8998/partial set Content-Length to 1024, use download_maxsize= 1000 to avoid
@@ -743,7 +742,7 @@ class TestHttpWithCrawlerBase(ABC):
         failure = crawler.spider.meta["failure"]  # type: ignore[attr-defined]
         assert isinstance(failure.value, defer.CancelledError)
 
-    @deferred_f_from_coro_f
+    @pytest.mark.asyncio
     async def test_download(self, mockserver: MockServer) -> None:
         crawler = get_crawler(SingleRequestSpider, self.settings_dict)
         await maybe_deferred_to_future(
@@ -780,7 +779,7 @@ class TestHttpProxyBase(ABC):
 
         await close_dh(dh)
 
-    @deferred_f_from_coro_f
+    @pytest.mark.asyncio
     async def test_download_with_proxy(
         self,
         proxy_mockserver: ProxyEchoMockServer,
@@ -793,7 +792,7 @@ class TestHttpProxyBase(ABC):
         assert response.url == request.url
         assert response.body == self.expected_http_proxy_request_body
 
-    @deferred_f_from_coro_f
+    @pytest.mark.asyncio
     async def test_download_without_proxy(
         self,
         proxy_mockserver: ProxyEchoMockServer,
@@ -807,7 +806,7 @@ class TestHttpProxyBase(ABC):
         assert response.url == request.url
         assert response.body == b"/path/to/resource"
 
-    @deferred_f_from_coro_f
+    @pytest.mark.asyncio
     async def test_download_with_proxy_https_timeout(
         self,
         proxy_mockserver: ProxyEchoMockServer,
@@ -822,7 +821,7 @@ class TestHttpProxyBase(ABC):
             await download_request(download_handler, request)
         assert domain in exc_info.value.osError
 
-    @deferred_f_from_coro_f
+    @pytest.mark.asyncio
     async def test_download_with_proxy_without_http_scheme(
         self,
         proxy_mockserver: ProxyEchoMockServer,

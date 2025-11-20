@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING
 from testfixtures import LogCapture
 
 from scrapy.exceptions import StopDownload
-from scrapy.utils.defer import deferred_f_from_coro_f
+# Removed deferred_f_from_coro_f import
 from tests.test_engine import (
     AttrsItemsSpider,
     CrawlerRun,
@@ -26,7 +26,7 @@ class BytesReceivedCrawlerRun(CrawlerRun):
 
 
 class TestBytesReceivedEngine(TestEngineBase):
-    @deferred_f_from_coro_f
+    @pytest.mark.asyncio
     async def test_crawler(self, mockserver: MockServer) -> None:
         for spider in (
             MySpider,

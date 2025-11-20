@@ -18,7 +18,7 @@ from scrapy.core.downloader.handlers.s3 import S3DownloadHandler
 from scrapy.exceptions import NotConfigured
 from scrapy.http import Request, Response
 from scrapy.responsetypes import responsetypes
-from scrapy.utils.defer import deferred_f_from_coro_f, maybe_deferred_to_future
+from scrapy.utils.defer import maybe_deferred_to_future
 from scrapy.utils.misc import build_from_crawler
 from scrapy.utils.spider import DefaultSpider
 from scrapy.utils.test import get_crawler
@@ -99,7 +99,7 @@ class TestFile:
             self.download_handler.download_request(request, DefaultSpider())
         )
 
-    @deferred_f_from_coro_f
+    @pytest.mark.asyncio
     async def test_download(self):
         request = Request(path_to_file_uri(self.tmpname))
         assert request.url.upper().endswith("%5E")
@@ -109,7 +109,7 @@ class TestFile:
         assert response.body == b"0123456789"
         assert response.protocol is None
 
-    @deferred_f_from_coro_f
+    @pytest.mark.asyncio
     async def test_non_existent(self):
         request = Request(path_to_file_uri(mkdtemp()))
         # the specific exception differs between platforms
@@ -305,7 +305,7 @@ class TestDataURI:
             self.download_handler.download_request(request, DefaultSpider())
         )
 
-    @deferred_f_from_coro_f
+    @pytest.mark.asyncio
     async def test_response_attrs(self):
         uri = "data:,A%20brief%20note"
         request = Request(uri)
@@ -313,7 +313,7 @@ class TestDataURI:
         assert response.url == uri
         assert not response.headers
 
-    @deferred_f_from_coro_f
+    @pytest.mark.asyncio
     async def test_default_mediatype_encoding(self):
         request = Request("data:,A%20brief%20note")
         response = await self.download_request(request)
@@ -321,7 +321,7 @@ class TestDataURI:
         assert type(response) is responsetypes.from_mimetype("text/plain")  # pylint: disable=unidiomatic-typecheck
         assert response.encoding == "US-ASCII"
 
-    @deferred_f_from_coro_f
+    @pytest.mark.asyncio
     async def test_default_mediatype(self):
         request = Request("data:;charset=iso-8859-7,%be%d3%be")
         response = await self.download_request(request)
@@ -329,7 +329,7 @@ class TestDataURI:
         assert type(response) is responsetypes.from_mimetype("text/plain")  # pylint: disable=unidiomatic-typecheck
         assert response.encoding == "iso-8859-7"
 
-    @deferred_f_from_coro_f
+    @pytest.mark.asyncio
     async def test_text_charset(self):
         request = Request("data:text/plain;charset=iso-8859-7,%be%d3%be")
         response = await self.download_request(request)
@@ -337,7 +337,7 @@ class TestDataURI:
         assert response.body == b"\xbe\xd3\xbe"
         assert response.encoding == "iso-8859-7"
 
-    @deferred_f_from_coro_f
+    @pytest.mark.asyncio
     async def test_mediatype_parameters(self):
         request = Request(
             "data:text/plain;foo=%22foo;bar%5C%22%22;"
@@ -349,13 +349,13 @@ class TestDataURI:
         assert type(response) is responsetypes.from_mimetype("text/plain")  # pylint: disable=unidiomatic-typecheck
         assert response.encoding == "utf-8"
 
-    @deferred_f_from_coro_f
+    @pytest.mark.asyncio
     async def test_base64(self):
         request = Request("data:text/plain;base64,SGVsbG8sIHdvcmxkLg%3D%3D")
         response = await self.download_request(request)
         assert response.text == "Hello, world."
 
-    @deferred_f_from_coro_f
+    @pytest.mark.asyncio
     async def test_protocol(self):
         request = Request("data:,")
         response = await self.download_request(request)

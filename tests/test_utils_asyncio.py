@@ -13,7 +13,7 @@ from scrapy.utils.asyncio import (
     _parallel_asyncio,
     is_asyncio_available,
 )
-from scrapy.utils.defer import deferred_f_from_coro_f
+# Removed deferred_f_from_coro_f import
 
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator
@@ -64,7 +64,7 @@ class TestParallelAsyncio:
                 await asyncio.sleep(random.random() / 20)
             yield i
 
-    @deferred_f_from_coro_f
+    @pytest.mark.asyncio
     async def test_simple(self):
         for length in [20, 50, 100]:
             parallel_count = [0]
@@ -82,7 +82,7 @@ class TestParallelAsyncio:
             assert list(range(length)) == sorted(results)
             assert max_parallel_count[0] <= self.CONCURRENT_ITEMS
 
-    @deferred_f_from_coro_f
+    @pytest.mark.asyncio
     async def test_delays(self):
         for length in [20, 50, 100]:
             parallel_count = [0]
