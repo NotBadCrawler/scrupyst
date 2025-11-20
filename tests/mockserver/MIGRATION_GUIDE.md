@@ -1,37 +1,37 @@
-# Mock Server Migration Guide
+# Mock 服务器迁移指南
 
-## Overview
+## 概述
 
-This guide documents the migration of Scrapy's test mock servers from Twisted to aiohttp.
-This is a **critical blocker** for Phase 5 (test migration) as all tests depend on these servers.
+本指南记录了将 Scrapy 测试 mock 服务器从 Twisted 迁移到 aiohttp 的过程。
+这是**第五阶段（测试迁移）的关键阻塞项**，因为所有测试都依赖这些服务器。
 
-## Status
+## 状态
 
-**Current Progress:** Infrastructure foundation complete (~20% of mock server work)
+**当前进度：** 基础架构已完成（约占 mock 服务器工作的 20%）
 
-### Completed ✅
+### 已完成 ✅
 
-1. **http_base_aiohttp.py** (147 lines) - NEW
-   - `BaseMockServerAiohttp` class providing same interface as `BaseMockServer`
-   - `main_factory_aiohttp()` for creating aiohttp-based server runners
-   - HTTP and HTTPS support with dynamic port allocation
-   - Subprocess-based server spawning (same pattern as Twisted version)
+1. **http_base_aiohttp.py**（147 行）- 新建
+   - 提供与 `BaseMockServer` 相同接口的 `BaseMockServerAiohttp` 类
+   - 用于创建基于 aiohttp 的服务器运行器的 `main_factory_aiohttp()`
+   - HTTP 和 HTTPS 支持，具有动态端口分配
+   - 基于子进程的服务器生成（与 Twisted 版本模式相同）
 
-2. **utils.py** - UPDATED
-   - Added `ssl_context_factory_aiohttp()` using Python's stdlib ssl module
-   - Made Twisted imports optional for backward compatibility
-   - Both old and new SSL factories available
+2. **utils.py** - 已更新
+   - 使用 Python 标准库 ssl 模块添加了 `ssl_context_factory_aiohttp()`
+   - 使 Twisted 导入可选以保持向后兼容性
+   - 新旧 SSL 工厂均可用
 
-### Remaining Work 🚫
+### 剩余工作 🚫
 
-#### High Priority: HTTP Resources (349 lines)
+#### 高优先级：HTTP 资源（349 行）
 
-The file `http_resources.py` contains all the Twisted web resources used by tests.
-Each resource needs to be converted to an aiohttp request handler.
+文件 `http_resources.py` 包含测试使用的所有 Twisted web 资源。
+每个资源都需要转换为 aiohttp 请求处理程序。
 
-**Conversion Pattern:**
+**转换模式：**
 
-Twisted Resource:
+Twisted 资源：
 ```python
 class Status(resource.Resource):
     isLeaf = True
@@ -42,58 +42,58 @@ class Status(resource.Resource):
         return b""
 ```
 
-Aiohttp Handler:
+Aiohttp 处理程序：
 ```python
 async def status_handler(request):
     n = int(request.query.get('n', 200))
     return web.Response(status=n, body=b"")
 ```
 
-**Resources to Convert:**
+**要转换的资源：**
 
-1. **Simple Resources** (no async delays):
-   - `Status` - Return HTTP status code from query param
-   - `HostHeaderResource` - Echo Host header
-   - `PayloadResource` - Validate request body length
-   - `Echo` - Echo request back
-   - `Partial` - Partial content responses
-   - `Raw` - Raw HTTP response
-   - `Drop` - Drop connection
-   - `Compress` - Compressed responses
-   - `SetCookie` - Set cookies
-   - `ContentLengthHeaderResource` - Custom Content-Length
-   - `EmptyContentTypeHeaderResource` - Empty Content-Type
-   - `DuplicateHeaderResource` - Duplicate headers
-   - `ResponseHeadersResource` - Custom response headers
+1. **简单资源**（无异步延迟）：
+   - `Status` - 从查询参数返回 HTTP 状态码
+   - `HostHeaderResource` - 回显 Host 头
+   - `PayloadResource` - 验证请求体长度
+   - `Echo` - 回显请求
+   - `Partial` - 部分内容响应
+   - `Raw` - 原始 HTTP 响应
+   - `Drop` - 断开连接
+   - `Compress` - 压缩响应
+   - `SetCookie` - 设置 cookie
+   - `ContentLengthHeaderResource` - 自定义 Content-Length
+   - `EmptyContentTypeHeaderResource` - 空 Content-Type
+   - `DuplicateHeaderResource` - 重复头
+   - `ResponseHeadersResource` - 自定义响应头
 
-2. **Async Resources** (use delays):
-   - `Follow` - Link following with delays
-   - `Delay` - Delayed responses
-   - `ForeverTakingResource` - Never-finishing requests
+2. **异步资源**（使用延迟）：
+   - `Follow` - 带延迟的链接跟随
+   - `Delay` - 延迟响应
+   - `ForeverTakingResource` - 永不完成的请求
 
-3. **Complex Resources**:
-   - `BrokenDownloadResource` - Broken/interrupted downloads
-   - `ChunkedResource` - Chunked transfer encoding
-   - `BrokenChunkedResource` - Broken chunked encoding
-   - `LargeChunkedFileResource` - Large file chunks
-   - `ArbitraryLengthPayloadResource` - Variable-length payloads
+3. **复杂资源**：
+   - `BrokenDownloadResource` - 中断/损坏的下载
+   - `ChunkedResource` - 分块传输编码
+   - `BrokenChunkedResource` - 损坏的分块编码
+   - `LargeChunkedFileResource` - 大文件块
+   - `ArbitraryLengthPayloadResource` - 可变长度有效负载
 
-4. **Redirect Resources**:
-   - `RedirectTo` - Redirect handler
-   - `NoMetaRefreshRedirect` - Redirect without meta refresh
+4. **重定向资源**：
+   - `RedirectTo` - 重定向处理程序
+   - `NoMetaRefreshRedirect` - 无 meta refresh 的重定向
 
-#### Medium Priority: HTTP Mock Server (101 lines)
+#### 中优先级：HTTP Mock 服务器（101 行）
 
-File: `http.py`
+文件：`http.py`
 
-**Tasks:**
-1. Create `http_aiohttp.py` using `http_base_aiohttp.py`
-2. Convert `Root` resource to aiohttp Application with routes
-3. Map all resource paths to aiohttp handlers
+**任务：**
+1. 使用 `http_base_aiohttp.py` 创建 `http_aiohttp.py`
+2. 将 `Root` 资源转换为带路由的 aiohttp Application
+3. 将所有资源路径映射到 aiohttp 处理程序
 
-**Conversion Pattern:**
+**转换模式：**
 
-Twisted:
+Twisted：
 ```python
 class Root(resource.Resource):
     def __init__(self):
@@ -102,7 +102,7 @@ class Root(resource.Resource):
         self.putChild(b"echo", Echo())
 ```
 
-Aiohttp:
+Aiohttp：
 ```python
 def create_app():
     app = web.Application()
@@ -111,127 +111,127 @@ def create_app():
     return app
 ```
 
-#### Medium Priority: HTTPS Mock Server (46 lines)
+#### 中优先级：HTTPS Mock 服务器（46 行）
 
-File: `simple_https.py`
+文件：`simple_https.py`
 
-Same pattern as `http.py` but only serves HTTPS. Should be straightforward once HTTP version is done.
+与 `http.py` 模式相同，但仅提供 HTTPS。完成 HTTP 版本后应该很简单。
 
-#### Low Priority: Proxy Echo (17 lines)
+#### 低优先级：代理回显（17 行）
 
-File: `proxy_echo.py`
+文件：`proxy_echo.py`
 
-Simple proxy server. Can likely use aiohttp's proxy capabilities or implement simple forwarding.
+简单的代理服务器。可能可以使用 aiohttp 的代理功能或实现简单转发。
 
-#### Complex: DNS Mock Server (67 lines)
+#### 复杂：DNS Mock 服务器（67 行）
 
-File: `dns.py`
+文件：`dns.py`
 
-**Challenge:** Uses `twisted.names` DNS server framework
+**挑战：** 使用 `twisted.names` DNS 服务器框架
 
-**Options:**
-1. Find asyncio-based DNS library (e.g., `aiodns`, `dnspython` with asyncio)
-2. Implement simple DNS server with `asyncio.DatagramProtocol`
-3. Use external DNS mock tool (like `dnsmasq` in subprocess)
+**选项：**
+1. 查找基于 asyncio 的 DNS 库（例如 `aiodns`、带 asyncio 的 `dnspython`）
+2. 使用 `asyncio.DatagramProtocol` 实现简单的 DNS 服务器
+3. 使用外部 DNS mock 工具（如子进程中的 `dnsmasq`）
 
-#### Complex: FTP Mock Server (59 lines)
+#### 复杂：FTP Mock 服务器（59 行）
 
-File: `ftp.py`
+文件：`ftp.py`
 
-**Challenge:** Uses Twisted's FTP server
+**挑战：** 使用 Twisted 的 FTP 服务器
 
-**Options:**
-1. Use `aioftp` library (asyncio-based FTP server)
-2. Use `pyftpdlib` with asyncio integration
-3. Implement minimal FTP server for test needs
+**选项：**
+1. 使用 `aioftp` 库（基于 asyncio 的 FTP 服务器）
+2. 使用带 asyncio 集成的 `pyftpdlib`
+3. 为测试需求实现最小的 FTP 服务器
 
-## Implementation Strategy
+## 实施策略
 
-### Phase 1: Core HTTP Resources (Week 1)
-1. Create `http_resources_aiohttp.py`
-2. Implement all simple resources (13 resources)
-3. Test each resource independently
+### 第一阶段：核心 HTTP 资源（第 1 周）
+1. 创建 `http_resources_aiohttp.py`
+2. 实现所有简单资源（13 个资源）
+3. 独立测试每个资源
 
-### Phase 2: Async HTTP Resources (Week 1-2)
-1. Implement async delay resources (3 resources)
-2. Implement complex resources (6 resources)
-3. Handle chunked encoding properly
-4. Test with actual Scrapy downloader
+### 第二阶段：异步 HTTP 资源（第 1-2 周）
+1. 实现异步延迟资源（3 个资源）
+2. 实现复杂资源（6 个资源）
+3. 正确处理分块编码
+4. 使用实际的 Scrapy 下载器测试
 
-### Phase 3: HTTP Server Integration (Week 2)
-1. Create `http_aiohttp.py`
-2. Wire up all resources to routes
-3. Test full HTTP mock server
-4. Verify all existing tests can use it
+### 第三阶段：HTTP 服务器集成（第 2 周）
+1. 创建 `http_aiohttp.py`
+2. 将所有资源连接到路由
+3. 测试完整的 HTTP mock 服务器
+4. 验证所有现有测试可以使用它
 
-### Phase 4: HTTPS & Proxy (Week 2)
-1. Implement HTTPS variant
-2. Implement proxy echo
-3. Test SSL/TLS functionality
+### 第四阶段：HTTPS 和代理（第 2 周）
+1. 实现 HTTPS 变体
+2. 实现代理回显
+3. 测试 SSL/TLS 功能
 
-### Phase 5: DNS & FTP (Week 3-4)
-1. Research and choose DNS solution
-2. Implement DNS mock
-3. Research and choose FTP solution
-4. Implement FTP mock
-5. Test specialty protocol handlers
+### 第五阶段：DNS 和 FTP（第 3-4 周）
+1. 研究并选择 DNS 解决方案
+2. 实现 DNS mock
+3. 研究并选择 FTP 解决方案
+4. 实现 FTP mock
+5. 测试特殊协议处理程序
 
-## Testing Approach
+## 测试方法
 
-For each converted resource:
-1. Write standalone test comparing Twisted and aiohttp versions
-2. Verify same HTTP responses for same inputs
-3. Test error cases and edge cases
-4. Update dependent test files incrementally
+对于每个转换的资源：
+1. 编写独立测试比较 Twisted 和 aiohttp 版本
+2. 验证相同输入的相同 HTTP 响应
+3. 测试错误情况和边缘情况
+4. 逐步更新依赖的测试文件
 
-## Key Differences: Twisted vs Aiohttp
+## 关键差异：Twisted vs Aiohttp
 
-### Request Object
+### 请求对象
 
-Twisted:
+Twisted：
 ```python
-request.args[b"name"][0]  # Query params
-request.content.read()     # Body
-request.requestHeaders.getRawHeaders(b"host")  # Headers
-request.setResponseCode(404)  # Set status
-request.write(data)  # Write response
-request.finish()  # Complete response
+request.args[b"name"][0]  # 查询参数
+request.content.read()     # 主体
+request.requestHeaders.getRawHeaders(b"host")  # 头
+request.setResponseCode(404)  # 设置状态
+request.write(data)  # 写入响应
+request.finish()  # 完成响应
 ```
 
-Aiohttp:
+Aiohttp：
 ```python
-request.query.get('name')  # Query params
-await request.read()  # Body
-request.headers.get('Host')  # Headers
-return web.Response(status=404)  # Set status
-# Response is returned, not written incrementally (except streaming)
+request.query.get('name')  # 查询参数
+await request.read()  # 主体
+request.headers.get('Host')  # 头
+return web.Response(status=404)  # 设置状态
+# 响应是返回的，而不是增量写入的（流式传输除外）
 ```
 
-### Async Delays
+### 异步延迟
 
-Twisted:
+Twisted：
 ```python
 d = deferLater(reactor, delay, function, *args)
 return NOT_DONE_YET
 ```
 
-Aiohttp:
+Aiohttp：
 ```python
 await asyncio.sleep(delay)
 result = await function(*args)
 return web.Response(...)
 ```
 
-### Streaming Responses
+### 流式响应
 
-Twisted:
+Twisted：
 ```python
 request.write(chunk1)
 request.write(chunk2)
 request.finish()
 ```
 
-Aiohttp:
+Aiohttp：
 ```python
 response = web.StreamResponse()
 await response.prepare(request)
@@ -241,20 +241,20 @@ await response.write_eof()
 return response
 ```
 
-## Files Created/Modified
+## 创建/修改的文件
 
-### New Files
+### 新文件
 - `tests/mockserver/http_base_aiohttp.py` ✅
-- `tests/mockserver/http_resources_aiohttp.py` (TODO)
-- `tests/mockserver/http_aiohttp.py` (TODO)
-- `tests/mockserver/simple_https_aiohttp.py` (TODO)
-- `tests/mockserver/dns_aiohttp.py` (TODO)
-- `tests/mockserver/ftp_aiohttp.py` (TODO)
+- `tests/mockserver/http_resources_aiohttp.py` (待办)
+- `tests/mockserver/http_aiohttp.py` (待办)
+- `tests/mockserver/simple_https_aiohttp.py` (待办)
+- `tests/mockserver/dns_aiohttp.py` (待办)
+- `tests/mockserver/ftp_aiohttp.py` (待办)
 
-### Modified Files
-- `tests/mockserver/utils.py` ✅ (added `ssl_context_factory_aiohttp`)
+### 修改的文件
+- `tests/mockserver/utils.py` ✅（添加了 `ssl_context_factory_aiohttp`）
 
-### Files to Deprecate (Eventually)
+### 最终要弃用的文件
 - `tests/mockserver/http_base.py`
 - `tests/mockserver/http_resources.py`
 - `tests/mockserver/http.py`
@@ -262,23 +262,23 @@ return response
 - `tests/mockserver/dns.py`
 - `tests/mockserver/ftp.py`
 
-## Resources
+## 资源
 
-- [aiohttp Server Documentation](https://docs.aiohttp.org/en/stable/web.html)
-- [aiohttp Streaming Response](https://docs.aiohttp.org/en/stable/web_quickstart.html#streaming-response)
-- [aioftp Documentation](https://aioftp.readthedocs.io/)
+- [aiohttp 服务器文档](https://docs.aiohttp.org/en/stable/web.html)
+- [aiohttp 流式响应](https://docs.aiohttp.org/en/stable/web_quickstart.html#streaming-response)
+- [aioftp 文档](https://aioftp.readthedocs.io/)
 - [dnspython asyncio](https://dnspython.readthedocs.io/en/stable/async.html)
 
-## Estimated Timeline
+## 预估时间表
 
-- **Total Effort:** 3-4 weeks
-- **Current Progress:** ~20% (infrastructure)
-- **Remaining:** ~80% (implementation & testing)
+- **总工作量：** 3-4 周
+- **当前进度：** ~20%（基础架构）
+- **剩余：** ~80%（实现和测试）
 
-## Next Steps
+## 下一步
 
-1. Start with simple HTTP resources in `http_resources_aiohttp.py`
-2. Test each resource independently
-3. Build up complexity gradually
-4. Integrate into full HTTP server
-5. Update tests incrementally as mock servers become available
+1. 从 `http_resources_aiohttp.py` 中的简单 HTTP 资源开始
+2. 独立测试每个资源
+3. 逐步构建复杂性
+4. 集成到完整的 HTTP 服务器
+5. 随着 mock 服务器可用，逐步更新测试
