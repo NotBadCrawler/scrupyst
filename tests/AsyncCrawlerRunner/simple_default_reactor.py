@@ -1,8 +1,7 @@
-from twisted.internet.task import react
+import asyncio
 
 from scrapy import Spider
 from scrapy.crawler import AsyncCrawlerRunner
-from scrapy.utils.defer import deferred_f_from_coro_f
 from scrapy.utils.log import configure_logging
 
 
@@ -14,11 +13,10 @@ class NoRequestsSpider(Spider):
         yield
 
 
-@deferred_f_from_coro_f
-async def main(reactor):
+async def main():
     configure_logging()
     runner = AsyncCrawlerRunner()
     await runner.crawl(NoRequestsSpider)
 
 
-react(main)
+asyncio.run(main())

@@ -1,10 +1,5 @@
-from twisted.internet import selectreactor
-from twisted.python import log
-
 import scrapy
 from scrapy.crawler import CrawlerProcess
-
-selectreactor.install()
 
 
 class NoRequestsSpider(scrapy.Spider):
@@ -17,6 +12,5 @@ class NoRequestsSpider(scrapy.Spider):
 
 process = CrawlerProcess(settings={})
 
-d = process.crawl(NoRequestsSpider)
-d.addErrback(log.err)
+process.crawl(NoRequestsSpider)
 process.start()

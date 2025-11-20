@@ -5,7 +5,6 @@ import sys
 
 from scrapy import Spider
 from scrapy.crawler import CrawlerProcess
-from scrapy.utils.defer import deferred_from_coro
 
 
 class UppercasePipeline:
@@ -13,8 +12,8 @@ class UppercasePipeline:
         spider.logger.info("async pipeline opened!")
         await asyncio.sleep(0.1)
 
-    def open_spider(self, spider):
-        return deferred_from_coro(self._open_spider(spider))
+    async def open_spider(self, spider):
+        await self._open_spider(spider)
 
     def process_item(self, item):
         return {"url": item["url"].upper()}
@@ -40,7 +39,6 @@ if __name__ == "__main__":
 
     process = CrawlerProcess(
         settings={
-            "TWISTED_REACTOR": "twisted.internet.asyncioreactor.AsyncioSelectorReactor",
             "ASYNCIO_EVENT_LOOP": ASYNCIO_EVENT_LOOP,
         }
     )
