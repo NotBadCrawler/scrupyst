@@ -210,11 +210,11 @@ All downloader components have been successfully migrated:
    - `scrapy/pipelines/files.py` (708 lines) - ✅ COMPLETED! Migrated to ThreadPoolExecutor
    - `scrapy/core/http2/` (1133 lines) - ✅ COMPLETED! Marked as deprecated (replaced by http2_aiohttp)
 
-### Phase 5: Tests (50% Complete) 🔄
+### Phase 5: Tests (55% Complete) 🔄
 
 **Massive undertaking - 200+ test files, ~41,559 lines of test code**
 
-**Status:** In Progress - Infrastructure complete, 20 test files migrated!
+**Status:** In Progress - Infrastructure complete, 29 test files migrated!
 
 **Completed:**
 1. ✅ Updated test dependencies
@@ -233,7 +233,9 @@ All downloader components have been successfully migrated:
    - Replaced `twisted_sleep()` with `asyncio_sleep()` in tests/utils/__init__.py
    - Removed all Twisted Deferred and reactor imports from test utilities
 
-4. ✅ Migrated 20 test files (20/200+)
+4. ✅ Migrated 29 test files (29/200+) - **NEW: 9 additional files migrated!**
+   
+   **Previously migrated (20 files):**
    - `test_dependencies.py` - Removed Twisted version checking
    - `test_utils_reactor.py` - Converted to pure async/await
    - `test_closespider.py` - 7 async tests
@@ -254,6 +256,17 @@ All downloader components have been successfully migrated:
    - `test_scheduler_base.py` - 2 async tests + async scheduler
    - `test_request_cb_kwargs.py` - 1 async test
    - `test_spider_start.py` - Replaced twisted_sleep
+   
+   **Newly migrated (9 files):**
+   - ✅ `test_scheduler.py` - Removed @inlineCallbacks, converted to async/await
+   - ✅ `test_spidermiddleware_httperror.py` - Removed @inlineCallbacks (3 tests)
+   - ✅ `test_pipeline_crawl.py` - Removed @inlineCallbacks (5 tests)
+   - ✅ `test_request_attribute_binding.py` - Removed @inlineCallbacks (8 tests)
+   - ✅ `test_downloadermiddleware_robotstxt.py` - Replaced Deferred with asyncio.Future
+   - ✅ `test_utils_log.py` - Replaced twisted.python.failure.Failure
+   - ✅ `test_engine_loop.py` - Replaced reactor with asyncio event loop
+   - ✅ `test_spider.py` - Removed @inlineCallbacks (2 tests)
+   - ✅ `test_spidermiddleware.py` - Replaced Deferred with asyncio.Future
 
 5. ✅ Mock server infrastructure (100% complete!)
    
@@ -323,16 +336,18 @@ All downloader components have been successfully migrated:
 
 **Remaining Work:**
 
-6. 🔄 Migrate remaining test files (~180 files remaining)
+6. 🔄 Migrate remaining test files (~49 files with Twisted imports remaining)
    - Convert @inlineCallbacks to async/await throughout
    - Replace Deferred with asyncio.Future
    - Update pytest_twisted fixtures to pytest-asyncio equivalents
    - Fix imports (remove twisted.* imports)
    - Update test assertions for asyncio patterns
    
-   **Remaining files with Twisted imports (~25 complex files):**
-   - Medium (100-300 lines): test_core_downloader.py, test_request_attribute_binding.py, test_downloader_handler_twisted_ftp.py, test_downloader_handler_twisted_http2.py, test_pipeline_crawl.py, test_spidermiddleware_httperror.py, test_downloadermiddleware_robotstxt.py, test_utils_log.py, test_spidermiddleware_process_start.py, test_engine_loop.py, test_downloadermiddleware.py, test_scheduler.py, test_webclient.py, test_utils_defer.py
-   - Large (> 300 lines): test_pipelines.py, test_pipeline_media.py, test_spidermiddleware.py, test_engine.py, test_http2_client_protocol.py, test_pipeline_files.py, test_downloader_handlers_http_base.py, test_spider.py, test_crawl.py, test_crawler.py (1213 lines), test_feedexport.py (3021 lines)
+   **Remaining files with Twisted imports (~49 complex files):**
+   - Small (< 10 references): test_engine.py (5), test_downloader_handler_twisted_http2.py (5), test_downloader_handler_twisted_ftp.py (6), test_downloadermiddleware_retry.py (7), test_downloader_handlers_http_base.py (8), test_pipeline_files.py (9)
+   - Medium (10-30 references): test_core_downloader.py (10), test_downloadermiddleware.py (10), test_feedexport.py (10), test_pipeline_media.py (13), test_pipelines.py (14), test_http2_client_protocol.py (29), test_webclient.py (29)
+   - Large (> 30 references): test_utils_defer.py (42), test_crawl.py (58), test_crawler.py (73)
+   - CrawlerProcess/CrawlerRunner test scripts (~20 files in subdirectories) - May need special handling
 
 7. 🚫 Run and fix tests iteratively
    - Run pytest to identify failures
@@ -340,8 +355,8 @@ All downloader components have been successfully migrated:
    - Update test assertions and expectations
    - Validate all tests pass
 
-**Estimated Completion:** 1-2 weeks of focused work (50% complete)
-**Current Progress:** ~50% (infrastructure + ALL mock servers + 20 test files migrated)
+**Estimated Completion:** 1-2 weeks of focused work (55% complete)
+**Current Progress:** ~55% (infrastructure + ALL mock servers + 29 test files migrated)
 **Next Priority:** Continue migrating remaining test files to pytest-asyncio
 
 ### Phase 6: Documentation (0% Complete) 🚫

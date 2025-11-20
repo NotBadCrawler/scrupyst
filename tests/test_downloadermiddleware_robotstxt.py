@@ -5,9 +5,6 @@ from typing import TYPE_CHECKING
 from unittest import mock
 
 import pytest
-from twisted.internet import error
-from twisted.internet.defer import Deferred, DeferredList
-from twisted.python import failure
 
 from scrapy.downloadermiddlewares.robotstxt import RobotsTxtMiddleware
 from scrapy.exceptions import IgnoreRequest, NotConfigured
@@ -16,6 +13,7 @@ from scrapy.http.request import NO_CALLBACK
 from scrapy.settings import Settings
 from scrapy.utils.asyncio import call_later
 from scrapy.utils.defer import (
+    Failure,
     deferred_f_from_coro_f,
     deferred_from_coro,
     maybe_deferred_to_future,
@@ -57,9 +55,9 @@ Disallow: /some/randome/page.html
         response = TextResponse("http://site.local/robots.txt", body=ROBOTS)
 
         async def return_response(request):
-            deferred = Deferred()
-            call_later(0, deferred.callback, response)
-            return await maybe_deferred_to_future(deferred)
+            future = asyncio.Future()
+            call_later(0, future.set_result, response)
+            return await future
 
         crawler.engine.download_async.side_effect = return_response
         return crawler
@@ -81,13 +79,9 @@ Disallow: /some/randome/page.html
     @deferred_f_from_coro_f
     async def test_robotstxt_multiple_reqs(self) -> None:
         middleware = RobotsTxtMiddleware(self._get_successful_crawler())
-        d1 = deferred_from_coro(
-            middleware.process_request(Request("http://site.local/allowed1"))
-        )
-        d2 = deferred_from_coro(
-            middleware.process_request(Request("http://site.local/allowed2"))
-        )
-        await maybe_deferred_to_future(DeferredList([d1, d2], fireOnOneErrback=True))
+        c1 = middleware.process_request(Request("http://site.local/allowed1"))
+        c2 = middleware.process_request(Request("http://site.local/allowed2"))
+        await asyncio.gather(c1, c2)
 
     @pytest.mark.only_asyncio
     @deferred_f_from_coro_f
@@ -125,9 +119,9 @@ Disallow: /some/randome/page.html
         )
 
         async def return_response(request):
-            deferred = Deferred()
-            call_later(0, deferred.callback, response)
-            return await maybe_deferred_to_future(deferred)
+            future = asyncio.Future()
+            call_later(0, future.set_result, response)
+            return await future
 
         crawler.engine.download_async.side_effect = return_response
         return crawler
@@ -147,9 +141,9 @@ Disallow: /some/randome/page.html
         response = Response("http://site.local/robots.txt")
 
         async def return_response(request):
-            deferred = Deferred()
-            call_later(0, deferred.callback, response)
-            return await maybe_deferred_to_future(deferred)
+            future = asyncio.Future()
+            call_later(0, future.set_result, response)
+            return await future
 
         crawler.engine.download_async.side_effect = return_response
         return crawler
@@ -165,23 +159,23 @@ Disallow: /some/randome/page.html
     @deferred_f_from_coro_f
     async def test_robotstxt_error(self, caplog: pytest.LogCaptureFixture) -> None:
         self.crawler.settings.set("ROBOTSTXT_OBEY", True)
-        err = error.DNSLookupError("Robotstxt address not found")
+        err = OSError("Robotstxt address not found")
 
         async def return_failure(request):
-            deferred = Deferred()
-            call_later(0, deferred.errback, failure.Failure(err))
-            return await maybe_deferred_to_future(deferred)
+            future = asyncio.Future()
+            call_later(0, future.set_exception, err)
+            return await future
 
         self.crawler.engine.download_async.side_effect = return_failure
 
         middleware = RobotsTxtMiddleware(self.crawler)
         await middleware.process_request(Request("http://site.local"))
-        assert "DNS lookup failed: Robotstxt address not found" in caplog.text
+        assert "Robotstxt address not found" in caplog.text
 
     @deferred_f_from_coro_f
     async def test_robotstxt_immediate_error(self):
         self.crawler.settings.set("ROBOTSTXT_OBEY", True)
-        err = error.DNSLookupError("Robotstxt address not found")
+        err = OSError("Robotstxt address not found")
 
         async def immediate_failure(request):
             raise err
@@ -196,9 +190,9 @@ Disallow: /some/randome/page.html
         self.crawler.settings.set("ROBOTSTXT_OBEY", True)
 
         async def ignore_request(request):
-            deferred = Deferred()
-            call_later(0, deferred.errback, failure.Failure(IgnoreRequest()))
-            return await maybe_deferred_to_future(deferred)
+            future = asyncio.Future()
+            call_later(0, future.set_exception, IgnoreRequest())
+            return await future
 
         self.crawler.engine.download_async.side_effect = ignore_request
 

@@ -7,7 +7,6 @@ from typing import TYPE_CHECKING, Any
 
 import pytest
 from testfixtures import LogCapture
-from twisted.internet.defer import inlineCallbacks
 from w3lib.url import add_or_replace_parameter
 
 from scrapy import Spider, signals
@@ -144,33 +143,30 @@ class TestFileDownloadCrawl:
         # check that no files were written to the media store
         assert not list(self.tmpmediastore.iterdir())
 
-    @inlineCallbacks
-    def test_download_media(self):
+    async def test_download_media(self):
         crawler = self._create_crawler(MediaDownloadSpider)
         with LogCapture() as log:
-            yield crawler.crawl(
+            await crawler.crawl(
                 self.mockserver.url("/static/files/images/"),
                 media_key=self.media_key,
                 media_urls_key=self.media_urls_key,
             )
         self._assert_files_downloaded(self.items, str(log))
 
-    @inlineCallbacks
-    def test_download_media_wrong_urls(self):
+    async def test_download_media_wrong_urls(self):
         crawler = self._create_crawler(BrokenLinksMediaDownloadSpider)
         with LogCapture() as log:
-            yield crawler.crawl(
+            await crawler.crawl(
                 self.mockserver.url("/static/files/images/"),
                 media_key=self.media_key,
                 media_urls_key=self.media_urls_key,
             )
         self._assert_files_download_failure(crawler, self.items, 404, str(log))
 
-    @inlineCallbacks
-    def test_download_media_redirected_default_failure(self):
+    async def test_download_media_redirected_default_failure(self):
         crawler = self._create_crawler(RedirectedMediaDownloadSpider)
         with LogCapture() as log:
-            yield crawler.crawl(
+            await crawler.crawl(
                 self.mockserver.url("/static/files/images/"),
                 media_key=self.media_key,
                 media_urls_key=self.media_urls_key,
@@ -178,15 +174,14 @@ class TestFileDownloadCrawl:
             )
         self._assert_files_download_failure(crawler, self.items, 302, str(log))
 
-    @inlineCallbacks
-    def test_download_media_redirected_allowed(self):
+    async def test_download_media_redirected_allowed(self):
         settings = {
             **self.settings,
             "MEDIA_ALLOW_REDIRECTS": True,
         }
         crawler = self._create_crawler(RedirectedMediaDownloadSpider, settings)
         with LogCapture() as log:
-            yield crawler.crawl(
+            await crawler.crawl(
                 self.mockserver.url("/static/files/images/"),
                 media_key=self.media_key,
                 media_urls_key=self.media_urls_key,
@@ -195,8 +190,7 @@ class TestFileDownloadCrawl:
         self._assert_files_downloaded(self.items, str(log))
         assert crawler.stats.get_value("downloader/response_status_count/302") == 3
 
-    @inlineCallbacks
-    def test_download_media_file_path_error(self):
+    async def test_download_media_file_path_error(self):
         cls = load_object(self.pipeline_class)
 
         class ExceptionRaisingMediaPipeline(cls):
@@ -209,7 +203,7 @@ class TestFileDownloadCrawl:
         }
         crawler = self._create_crawler(MediaDownloadSpider, settings)
         with LogCapture() as log:
-            yield crawler.crawl(
+            await crawler.crawl(
                 self.mockserver.url("/static/files/images/"),
                 media_key=self.media_key,
                 media_urls_key=self.media_urls_key,

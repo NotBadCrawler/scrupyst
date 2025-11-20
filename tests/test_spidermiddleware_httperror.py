@@ -4,7 +4,6 @@ import logging
 
 import pytest
 from testfixtures import LogCapture
-from twisted.internet.defer import inlineCallbacks
 
 from scrapy.http import Request, Response
 from scrapy.spidermiddlewares.httperror import HttpError, HttpErrorMiddleware
@@ -201,10 +200,9 @@ class TestHttpErrorMiddlewareIntegrational:
     def teardown_class(cls):
         cls.mockserver.__exit__(None, None, None)
 
-    @inlineCallbacks
-    def test_middleware_works(self):
+    async def test_middleware_works(self):
         crawler = get_crawler(_HttpErrorSpider)
-        yield crawler.crawl(mockserver=self.mockserver)
+        await crawler.crawl(mockserver=self.mockserver)
         assert not crawler.spider.skipped
         assert crawler.spider.parsed == {"200"}
         assert crawler.spider.failed == {"404", "402", "500"}
@@ -215,11 +213,10 @@ class TestHttpErrorMiddlewareIntegrational:
         assert get_value("httperror/response_ignored_status_count/402") == 1
         assert get_value("httperror/response_ignored_status_count/500") == 1
 
-    @inlineCallbacks
-    def test_logging(self):
+    async def test_logging(self):
         crawler = get_crawler(_HttpErrorSpider)
         with LogCapture() as log:
-            yield crawler.crawl(mockserver=self.mockserver, bypass_status_codes={402})
+            await crawler.crawl(mockserver=self.mockserver, bypass_status_codes={402})
         assert crawler.spider.parsed == {"200", "402"}
         assert crawler.spider.skipped == {"402"}
         assert crawler.spider.failed == {"404", "500"}
@@ -229,12 +226,11 @@ class TestHttpErrorMiddlewareIntegrational:
         assert "Ignoring response <200" not in str(log)
         assert "Ignoring response <402" not in str(log)
 
-    @inlineCallbacks
-    def test_logging_level(self):
+    async def test_logging_level(self):
         # HttpError logs ignored responses with level INFO
         crawler = get_crawler(_HttpErrorSpider)
         with LogCapture(level=logging.INFO) as log:
-            yield crawler.crawl(mockserver=self.mockserver)
+            await crawler.crawl(mockserver=self.mockserver)
         assert crawler.spider.parsed == {"200"}
         assert crawler.spider.failed == {"404", "402", "500"}
 

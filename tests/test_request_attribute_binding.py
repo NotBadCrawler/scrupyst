@@ -1,5 +1,4 @@
 from testfixtures import LogCapture
-from twisted.internet.defer import inlineCallbacks
 
 from scrapy import Request, signals
 from scrapy.http.response import Response
@@ -72,27 +71,24 @@ class TestCrawl:
     def teardown_class(cls):
         cls.mockserver.__exit__(None, None, None)
 
-    @inlineCallbacks
-    def test_response_200(self):
+    async def test_response_200(self):
         url = self.mockserver.url("/status?n=200")
         crawler = get_crawler(SingleRequestSpider)
-        yield crawler.crawl(seed=url, mockserver=self.mockserver)
+        await crawler.crawl(seed=url, mockserver=self.mockserver)
         response = crawler.spider.meta["responses"][0]
         assert response.request.url == url
 
-    @inlineCallbacks
-    def test_response_error(self):
+    async def test_response_error(self):
         for status in ("404", "500"):
             url = self.mockserver.url(f"/status?n={status}")
             crawler = get_crawler(SingleRequestSpider)
-            yield crawler.crawl(seed=url, mockserver=self.mockserver)
+            await crawler.crawl(seed=url, mockserver=self.mockserver)
             failure = crawler.spider.meta["failure"]
             response = failure.value.response
             assert failure.request.url == url
             assert response.request.url == url
 
-    @inlineCallbacks
-    def test_downloader_middleware_raise_exception(self):
+    async def test_downloader_middleware_raise_exception(self):
         url = self.mockserver.url("/status?n=200")
         crawler = get_crawler(
             SingleRequestSpider,
@@ -102,13 +98,12 @@ class TestCrawl:
                 },
             },
         )
-        yield crawler.crawl(seed=url, mockserver=self.mockserver)
+        await crawler.crawl(seed=url, mockserver=self.mockserver)
         failure = crawler.spider.meta["failure"]
         assert failure.request.url == url
         assert isinstance(failure.value, ZeroDivisionError)
 
-    @inlineCallbacks
-    def test_downloader_middleware_override_request_in_process_response(self):
+    async def test_downloader_middleware_override_request_in_process_response(self):
         """
         Downloader middleware which returns a response with an specific 'request' attribute.
 
@@ -134,7 +129,7 @@ class TestCrawl:
         crawler.signals.connect(signal_handler, signal=signals.response_received)
 
         with LogCapture() as log:
-            yield crawler.crawl(seed=url, mockserver=self.mockserver)
+            await crawler.crawl(seed=url, mockserver=self.mockserver)
 
         response = crawler.spider.meta["responses"][0]
         assert response.request.url == OVERRIDDEN_URL
@@ -150,8 +145,7 @@ class TestCrawl:
             ),
         )
 
-    @inlineCallbacks
-    def test_downloader_middleware_override_in_process_exception(self):
+    async def test_downloader_middleware_override_in_process_exception(self):
         """
         An exception is raised but caught by the next middleware, which
         returns a Response with a specific 'request' attribute.
@@ -168,13 +162,12 @@ class TestCrawl:
                 },
             },
         )
-        yield crawler.crawl(seed=url, mockserver=self.mockserver)
+        await crawler.crawl(seed=url, mockserver=self.mockserver)
         response = crawler.spider.meta["responses"][0]
         assert response.body == b"Caught ZeroDivisionError"
         assert response.request.url == OVERRIDDEN_URL
 
-    @inlineCallbacks
-    def test_downloader_middleware_do_not_override_in_process_exception(self):
+    async def test_downloader_middleware_do_not_override_in_process_exception(self):
         """
         An exception is raised but caught by the next middleware, which
         returns a Response without a specific 'request' attribute.
@@ -191,13 +184,12 @@ class TestCrawl:
                 },
             },
         )
-        yield crawler.crawl(seed=url, mockserver=self.mockserver)
+        await crawler.crawl(seed=url, mockserver=self.mockserver)
         response = crawler.spider.meta["responses"][0]
         assert response.body == b"Caught ZeroDivisionError"
         assert response.request.url == url
 
-    @inlineCallbacks
-    def test_downloader_middleware_alternative_callback(self):
+    async def test_downloader_middleware_alternative_callback(self):
         """
         Downloader middleware which returns a response with a
         specific 'request' attribute, with an alternative callback
@@ -213,7 +205,7 @@ class TestCrawl:
 
         with LogCapture() as log:
             url = self.mockserver.url("/status?n=200")
-            yield crawler.crawl(seed=url, mockserver=self.mockserver)
+            await crawler.crawl(seed=url, mockserver=self.mockserver)
 
         log.check_present(
             (

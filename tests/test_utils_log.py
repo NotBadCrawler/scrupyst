@@ -9,8 +9,8 @@ from typing import TYPE_CHECKING, Any
 
 import pytest
 from testfixtures import LogCapture
-from twisted.python.failure import Failure
 
+from scrapy.utils.defer import Failure
 from scrapy.utils.log import (
     LogCounterHandler,
     SpiderLoggerAdapter,

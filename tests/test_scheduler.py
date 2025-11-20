@@ -8,7 +8,6 @@ from collections import deque
 from typing import Any, NamedTuple
 
 import pytest
-from twisted.internet.defer import inlineCallbacks
 
 from scrapy.core.downloader import Downloader
 from scrapy.core.scheduler import BaseScheduler, Scheduler
@@ -363,12 +362,11 @@ class TestIntegrationWithDownloaderAwareInMemory:
             },
         )
 
-    @inlineCallbacks
-    def test_integration_downloader_aware_priority_queue(self):
+    async def test_integration_downloader_aware_priority_queue(self):
         with MockServer() as mockserver:
             url = mockserver.url("/status?n=200", is_secure=False)
             start_urls = [url] * 6
-            yield self.crawler.crawl(start_urls)
+            await self.crawler.crawl(start_urls)
             assert self.crawler.stats.get_value("downloader/response_count") == len(
                 start_urls
             )

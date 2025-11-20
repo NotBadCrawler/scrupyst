@@ -1,10 +1,9 @@
 from __future__ import annotations
 
+import asyncio
 from collections import deque
 from logging import ERROR
 from typing import TYPE_CHECKING
-
-from twisted.internet.defer import Deferred
 
 from scrapy import Request, Spider, signals
 from scrapy.utils.defer import deferred_f_from_coro_f, maybe_deferred_to_future
@@ -19,11 +18,7 @@ if TYPE_CHECKING:
 
 
 async def sleep(seconds: float = 0.001) -> None:
-    from twisted.internet import reactor
-
-    deferred: Deferred[None] = Deferred()
-    reactor.callLater(seconds, deferred.callback, None)
-    await maybe_deferred_to_future(deferred)
+    await asyncio.sleep(seconds)
 
 
 class TestMain:
@@ -39,8 +34,6 @@ class TestMain:
             name = "test"
 
             async def start(self):
-                from twisted.internet import reactor
-
                 yield Request("data:,a")
 
                 await sleep(seconds)
@@ -68,7 +61,7 @@ class TestMain:
                 # delayed call below, proving that the start iteration can
                 # finish before a scheduler “sleep” without causing the
                 # scheduler to finish.
-                reactor.callLater(seconds, self.crawler.engine._slot.scheduler.unpause)
+                asyncio.get_event_loop().call_later(seconds, self.crawler.engine._slot.scheduler.unpause)
 
             def parse(self, response):
                 pass
