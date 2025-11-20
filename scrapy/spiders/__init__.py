@@ -18,8 +18,7 @@ from scrapy.utils.url import url_is_from_spider
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Iterable
-
-    from twisted.internet.defer import Deferred
+    import asyncio
 
     # typing.Self requires Python 3.11
     from typing_extensions import Self

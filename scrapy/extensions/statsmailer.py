@@ -13,7 +13,7 @@ from scrapy.exceptions import NotConfigured
 from scrapy.mail import MailSender
 
 if TYPE_CHECKING:
-    from twisted.internet.defer import Deferred
+    import asyncio
 
     # typing.Self requires Python 3.11
     from typing_extensions import Self
@@ -39,7 +39,7 @@ class StatsMailer:
         crawler.signals.connect(o.spider_closed, signal=signals.spider_closed)
         return o
 
-    def spider_closed(self, spider: Spider) -> Deferred[None] | None:
+    def spider_closed(self, spider: Spider) -> asyncio.Future[None] | None:
         spider_stats = self.stats.get_stats()
         body = "Global stats\n\n"
         body += "\n".join(f"{k:<50} : {v}" for k, v in self.stats.get_stats().items())

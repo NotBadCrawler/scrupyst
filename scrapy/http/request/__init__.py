@@ -32,7 +32,7 @@ from scrapy.utils.trackref import object_ref
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable, Mapping
 
-    from twisted.python.failure import Failure
+    from scrapy.utils.defer import Failure
 
     # typing.NotRequired and typing.Self require Python 3.11
     from typing_extensions import NotRequired, Self

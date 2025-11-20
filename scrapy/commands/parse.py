@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import functools
 import inspect
 import json
@@ -7,7 +8,6 @@ import logging
 from typing import TYPE_CHECKING, Any, TypeVar, overload
 
 from itemadapter import ItemAdapter
-from twisted.internet.defer import Deferred, maybeDeferred
 from w3lib.url import is_url
 
 from scrapy.commands import BaseRunSpiderCommand
@@ -15,7 +15,7 @@ from scrapy.exceptions import UsageError
 from scrapy.http import Request, Response
 from scrapy.utils import display
 from scrapy.utils.asyncgen import collect_asyncgen
-from scrapy.utils.defer import _schedule_coro, aiter_errback, deferred_from_coro
+from scrapy.utils.defer import _schedule_coro, aiter_errback, ensure_awaitable
 from scrapy.utils.log import failure_to_exc_info
 from scrapy.utils.misc import arg_to_iter
 from scrapy.utils.spider import spidercls_for_request
@@ -24,7 +24,7 @@ if TYPE_CHECKING:
     import argparse
     from collections.abc import AsyncGenerator, AsyncIterator, Coroutine, Iterable
 
-    from twisted.python.failure import Failure
+    from scrapy.utils.defer import Failure
 
     from scrapy.http.request import CallbackT
     from scrapy.spiders import Spider
@@ -138,23 +138,23 @@ class Command(BaseRunSpiderCommand):
     @overload
     def iterate_spider_output(
         self, result: AsyncGenerator[_T] | Coroutine[Any, Any, _T]
-    ) -> Deferred[_T]: ...
+    ) -> asyncio.Future[_T]: ...
 
     @overload
     def iterate_spider_output(self, result: _T) -> Iterable[Any]: ...
 
-    def iterate_spider_output(self, result: Any) -> Iterable[Any] | Deferred[Any]:
+    def iterate_spider_output(self, result: Any) -> Iterable[Any] | asyncio.Future[Any]:
         if inspect.isasyncgen(result):
-            d = deferred_from_coro(
-                collect_asyncgen(aiter_errback(result, self.handle_exception))
-            )
-            d.addCallback(self.iterate_spider_output)
-            return d
+            async def _process_asyncgen():
+                collected = await collect_asyncgen(aiter_errback(result, self.handle_exception))
+                return self.iterate_spider_output(collected)
+            return asyncio.ensure_future(_process_asyncgen())
         if inspect.iscoroutine(result):
-            d = deferred_from_coro(result)
-            d.addCallback(self.iterate_spider_output)
-            return d
-        return arg_to_iter(deferred_from_coro(result))
+            async def _process_coro():
+                awaited = await result
+                return self.iterate_spider_output(awaited)
+            return asyncio.ensure_future(_process_coro())
+        return arg_to_iter(result)
 
     def add_items(self, lvl: int, new_items: list[Any]) -> None:
         old_items = self.items.get(lvl, [])
@@ -217,15 +217,15 @@ class Command(BaseRunSpiderCommand):
                 items.append(x)
         return items, requests, opts, depth, spider, callback
 
-    def run_callback(
+    async def run_callback(
         self,
         response: Response,
         callback: CallbackT,
         cb_kwargs: dict[str, Any] | None = None,
-    ) -> Deferred[Any]:
+    ) -> Any:
         cb_kwargs = cb_kwargs or {}
-        return maybeDeferred(
-            self.iterate_spider_output, callback(response, **cb_kwargs)
+        return await ensure_awaitable(
+            self.iterate_spider_output(callback(response, **cb_kwargs))
         )
 
     def get_callback_from_rules(
@@ -341,7 +341,7 @@ class Command(BaseRunSpiderCommand):
     def prepare_request(
         self, spider: Spider, request: Request, opts: argparse.Namespace
     ) -> Request:
-        def callback(response: Response, **cb_kwargs: Any) -> Deferred[list[Any]]:
+        async def callback(response: Response, **cb_kwargs: Any) -> list[Any]:
             # memorize first request
             if not self.first_response:
                 self.first_response = response
@@ -351,10 +351,11 @@ class Command(BaseRunSpiderCommand):
             # parse items and requests
             depth: int = response.meta["_depth"]
 
-            d = self.run_callback(response, cb, cb_kwargs)
-            d.addCallback(self._get_items_and_requests, opts, depth, spider, callback)
-            d.addCallback(self.scraped_data)
-            return d
+            result = await self.run_callback(response, cb, cb_kwargs)
+            result = await ensure_awaitable(
+                self._get_items_and_requests(result, opts, depth, spider, callback)
+            )
+            return await ensure_awaitable(self.scraped_data(result))
 
         # update request meta if any extra meta was passed through the --meta/-m opts.
         if opts.meta:

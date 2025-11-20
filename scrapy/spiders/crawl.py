@@ -24,7 +24,7 @@ from scrapy.utils.spider import iterate_spider_output
 if TYPE_CHECKING:
     from collections.abc import Iterable, Sequence
 
-    from twisted.python.failure import Failure
+    from scrapy.utils.defer import Failure
 
     # typing.Self requires Python 3.11
     from typing_extensions import Self

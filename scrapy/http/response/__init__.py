@@ -20,8 +20,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable, Iterable, Mapping
     from ipaddress import IPv4Address, IPv6Address
 
-    from twisted.internet.ssl import Certificate
-    from twisted.python.failure import Failure
+    from scrapy.utils.defer import Failure
 
     # typing.Self requires Python 3.11
     from typing_extensions import Self
@@ -64,7 +63,7 @@ class Response(object_ref):
         body: bytes = b"",
         flags: list[str] | None = None,
         request: Request | None = None,
-        certificate: Certificate | None = None,
+        certificate: str | None = None,
         ip_address: IPv4Address | IPv6Address | None = None,
         protocol: str | None = None,
     ):
@@ -74,7 +73,7 @@ class Response(object_ref):
         self._set_url(url)
         self.request: Request | None = request
         self.flags: list[str] = [] if flags is None else list(flags)
-        self.certificate: Certificate | None = certificate
+        self.certificate: str | None = certificate
         self.ip_address: IPv4Address | IPv6Address | None = ip_address
         self.protocol: str | None = protocol
 

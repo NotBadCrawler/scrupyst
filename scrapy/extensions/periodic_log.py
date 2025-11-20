@@ -12,7 +12,7 @@ from scrapy.utils.serialize import ScrapyJSONEncoder
 if TYPE_CHECKING:
     from json import JSONEncoder
 
-    from twisted.internet.task import LoopingCall
+    from scrapy.utils.asyncio import AsyncioLoopingCall
 
     # typing.Self requires Python 3.11
     from typing_extensions import Self
@@ -38,7 +38,7 @@ class PeriodicLog:
         self.stats: StatsCollector = stats
         self.interval: float = interval
         self.multiplier: float = 60.0 / self.interval
-        self.task: AsyncioLoopingCall | LoopingCall | None = None
+        self.task: AsyncioLoopingCall | None = None
         self.encoder: JSONEncoder = ScrapyJSONEncoder(sort_keys=True, indent=4)
         self.ext_stats_enabled: bool = bool(ext_stats)
         self.ext_stats_include: list[str] = ext_stats.get("include", [])
