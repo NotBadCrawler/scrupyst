@@ -4,7 +4,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
-from twisted.web.http import H2_ENABLED
 
 from scrapy.utils.reactor import set_asyncio_event_loop_policy
 from tests.keys import generate_keys
@@ -46,39 +45,11 @@ with ignore_file_path.open(encoding="utf-8") as reader:
         if file_path and file_path[0] != "#":
             collect_ignore.append(file_path)
 
-if not H2_ENABLED:
-    collect_ignore.extend(
-        (
-            "scrapy/core/downloader/handlers/http2.py",
-            *_py_files("scrapy/core/http2"),
-        )
-    )
-
 
 @pytest.fixture(scope="session")
 def mockserver() -> Generator[MockServer]:
     with MockServer() as mockserver:
         yield mockserver
-
-
-@pytest.fixture(scope="session")
-def reactor_pytest(request) -> str:
-    return request.config.getoption("--reactor")
-
-
-@pytest.fixture(autouse=True)
-def only_asyncio(request, reactor_pytest):
-    if request.node.get_closest_marker("only_asyncio") and reactor_pytest != "asyncio":
-        pytest.skip("This test is only run with --reactor=asyncio")
-
-
-@pytest.fixture(autouse=True)
-def only_not_asyncio(request, reactor_pytest):
-    if (
-        request.node.get_closest_marker("only_not_asyncio")
-        and reactor_pytest == "asyncio"
-    ):
-        pytest.skip("This test is only run without --reactor=asyncio")
 
 
 @pytest.fixture(autouse=True)
@@ -128,10 +99,8 @@ def requires_mitmproxy(request):
 
 
 def pytest_configure(config):
-    if config.getoption("--reactor") == "asyncio":
-        # Needed on Windows to switch from proactor to selector for Twisted reactor compatibility.
-        # If we decide to run tests with both, we will need to add a new option and check it here.
-        set_asyncio_event_loop_policy()
+    # Set asyncio event loop policy for Windows compatibility
+    set_asyncio_event_loop_policy()
 
 
 # Generate localhost certificate files, needed by some tests

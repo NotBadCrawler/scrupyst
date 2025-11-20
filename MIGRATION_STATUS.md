@@ -210,15 +210,104 @@ All downloader components have been successfully migrated:
    - `scrapy/pipelines/files.py` (708 lines) - ✅ COMPLETED! Migrated to ThreadPoolExecutor
    - `scrapy/core/http2/` (1133 lines) - ✅ COMPLETED! Marked as deprecated (replaced by http2_aiohttp)
 
-### Phase 5: Tests (0% Complete) 🚫
+### Phase 5: Tests (30% Complete) 🔄
 
-**Massive undertaking - 200+ test files**
+**Massive undertaking - 200+ test files, ~41,559 lines of test code**
 
-1. Replace `pytest-twisted` with `pytest-asyncio`
-2. Update all test utilities in `tests/utils/`
-3. Rewrite mock servers (currently use twisted.web)
-4. Update ~2000+ test assertions
-5. Fix/update test fixtures
+**Status:** In Progress - Mock server infrastructure substantially complete
+
+**Completed:**
+1. ✅ Updated test dependencies
+   - Replaced `pytest-twisted >= 1.14.3` with `pytest-asyncio >= 0.24.0` in tox.ini
+   - Removed Twisted, pyOpenSSL, service_identity, zope.interface from all pinned dependency sections
+   - Updated all pinned versions to latest compatible versions (pytest 8.4.1, cryptography 44.0.0, etc.)
+   - Removed reactor-specific test environments (default-reactor, default-reactor-pinned)
+
+2. ✅ Updated conftest.py
+   - Removed `twisted.web.http.H2_ENABLED` import and checks
+   - Removed reactor_pytest, only_asyncio, only_not_asyncio fixtures
+   - Updated pytest_configure to always set asyncio event loop policy (no conditional)
+   - Kept other useful fixtures (requires_uvloop, requires_botocore, etc.)
+
+3. ✅ Migrated test utilities in `tests/utils/`
+   - Replaced `twisted_sleep()` with `asyncio_sleep()` in tests/utils/__init__.py
+   - Removed all Twisted Deferred and reactor imports from test utilities
+
+4. ✅ Migrated simple test files (2/200+)
+   - `test_dependencies.py` - Removed Twisted version checking, added asyncio validation
+   - `test_utils_reactor.py` - Converted to pure async/await, removed reactor comparisons
+
+5. ✅ Mock server infrastructure (~60% of mock server work) - **Major Progress!**
+   
+   **Completed Files:**
+   - ✅ `http_base_aiohttp.py` (147 lines) - Full aiohttp mock server foundation
+     - `BaseMockServerAiohttp` class with same interface as Twisted version
+     - `main_factory_aiohttp()` for creating server runners
+     - HTTP and HTTPS support with dynamic port allocation
+     - Subprocess-based server spawning
+   
+   - ✅ `http_resources_aiohttp.py` (229 lines) - 18+ HTTP resource handlers
+     - Simple handlers: status, host, payload, echo, partial, text, html, encoding
+     - Async handlers: delay, forever (timeout testing), follow (with delays)
+     - Redirect handlers: redirect_to, redirect, redirected
+     - Special handlers: compress (gzip), set_cookie, numbers (large data)
+     - Route mapping and helper functions
+   
+   - ✅ `http_aiohttp.py` (98 lines) - Main HTTP mock server
+     - Complete application setup with all routes
+     - Static file serving
+     - `MockServer` class compatible with existing tests
+     - Entry point for standalone testing
+   
+   - ✅ `utils.py` - Updated with `ssl_context_factory_aiohttp()`
+     - Python stdlib SSL context support
+     - Backward compatibility with Twisted version
+   
+   - ✅ `MIGRATION_GUIDE.md` (273 lines) - Comprehensive documentation
+     - Conversion patterns and examples
+     - Detailed task breakdown
+     - Timeline and resource estimates
+     - Key differences between Twisted and aiohttp
+   
+   **Remaining Mock Server Work:**
+   - 📝 Complex HTTP resources (~10 handlers):
+     - Chunked transfer encoding (chunked, broken-chunked, largechunkedfile)
+     - Broken/interrupted downloads
+     - Custom header manipulation (duplicate-header, response-headers)
+     - Content-Length/Content-Type edge cases
+     - Raw HTTP response manipulation
+   
+   - 📝 DNS mock server (67 lines) - Needs asyncio DNS library
+   - 📝 FTP mock server (59 lines) - Can use aioftp
+   - 📝 Proxy echo server (17 lines) - Simple forwarding
+   - 📝 HTTPS variant (46 lines) - Should be straightforward
+   
+   - 🧪 Testing and validation of all mock servers
+
+**Remaining Work:**
+
+6. 🚫 Migrate remaining test files (~198 files, ~41,000+ lines)
+   - Convert @inlineCallbacks to async/await throughout
+   - Replace Deferred with asyncio.Future
+   - Update pytest_twisted fixtures to pytest-asyncio equivalents
+   - Fix imports (remove twisted.* imports, ~168 files affected)
+   - Update ~2000+ test assertions for asyncio patterns
+   
+   **Files with Twisted imports by size:**
+   - Small (< 100 lines): ~40 files
+   - Medium (100-300 lines): ~80 files  
+   - Large (> 300 lines): ~46 files
+   - Largest: test_crawler.py (~900 lines), test_feedexport.py (~700 lines)
+
+7. 🚫 Run and fix tests iteratively
+   - Run pytest to identify failures
+   - Fix test infrastructure issues
+   - Update test assertions and expectations
+   - Validate all tests pass
+
+**Estimated Completion:** 2-4 weeks of focused work
+**Current Progress:** ~30% (infrastructure + core mock servers + 2 test files)
+**Next Priority:** Complete remaining complex HTTP handlers, then begin migrating test files
 
 ### Phase 6: Documentation (0% Complete) 🚫
 
