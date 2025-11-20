@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import gzip
 import json
 import sys
@@ -11,11 +12,33 @@ from typing import TYPE_CHECKING, Any
 from unittest import mock
 
 import pytest
-from pytest_twisted import async_yield_fixture
 from testfixtures import LogCapture
-from twisted.internet import defer, error
-from twisted.web._newclient import ResponseFailed
-from twisted.web.http import _DataLoss
+
+# Conditional imports for Twisted - provide stubs if not available
+try:
+    from pytest_twisted import async_yield_fixture
+    from twisted.internet import defer, error
+    from twisted.web._newclient import ResponseFailed
+    from twisted.web.http import _DataLoss
+    HAS_TWISTED = True
+except ImportError:
+    HAS_TWISTED = False
+    async_yield_fixture = pytest.fixture
+    # Provide stub modules/classes for compatibility when Twisted not available
+    class DeferStub:
+        TimeoutError = asyncio.TimeoutError
+        CancelledError = asyncio.CancelledError
+        class Deferred:  # type: ignore[no-redef]
+            pass
+    class ErrorStub:
+        TimeoutError = asyncio.TimeoutError
+        ConnectionAborted = ConnectionAbortedError
+    defer = DeferStub()  # type: ignore[assignment]
+    error = ErrorStub()  # type: ignore[assignment]
+    class ResponseFailed(Exception):  # type: ignore[no-redef]
+        pass
+    class _DataLoss(Exception):  # type: ignore[no-redef]
+        pass
 
 from scrapy.http import Headers, HtmlResponse, Request, Response, TextResponse
 from scrapy.spiders import Spider

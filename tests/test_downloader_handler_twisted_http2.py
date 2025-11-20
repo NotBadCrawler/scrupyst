@@ -8,9 +8,19 @@ from unittest import mock
 
 import pytest
 from testfixtures import LogCapture
-from twisted.internet import defer, error
-from twisted.web.error import SchemeNotSupported
-from twisted.web.http import H2_ENABLED
+
+# This file tests the deprecated Twisted-based HTTP/2 handler
+# Skip all tests if Twisted is not available
+try:
+    from twisted.internet import defer, error
+    from twisted.web.error import SchemeNotSupported
+    from twisted.web.http import H2_ENABLED
+    HAS_TWISTED = True
+except ImportError:
+    HAS_TWISTED = False
+    H2_ENABLED = False
+    class SchemeNotSupported(Exception):  # type: ignore[no-redef]
+        pass
 
 from scrapy.http import Request
 from scrapy.spiders import Spider
@@ -33,7 +43,8 @@ if TYPE_CHECKING:
 
 
 pytestmark = pytest.mark.skipif(
-    not H2_ENABLED, reason="HTTP/2 support in Twisted is not enabled"
+    not HAS_TWISTED or not H2_ENABLED, 
+    reason="HTTP/2 handler tests require Twisted with H2 support (deprecated functionality)"
 )
 
 

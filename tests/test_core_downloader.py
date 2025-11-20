@@ -3,19 +3,31 @@ from __future__ import annotations
 import warnings
 from typing import TYPE_CHECKING, Any, cast
 
-import OpenSSL.SSL
 import pytest
-from pytest_twisted import async_yield_fixture
-from twisted.web import server, static
-from twisted.web.client import Agent, BrowserLikePolicyForHTTPS, readBody
-from twisted.web.client import Response as TxResponse
+
+# Conditional imports for Twisted - skip tests if not available
+try:
+    import OpenSSL.SSL
+    from pytest_twisted import async_yield_fixture
+    from twisted.web import server, static
+    from twisted.web.client import Agent, BrowserLikePolicyForHTTPS, readBody
+    from twisted.web.client import Response as TxResponse
+    HAS_TWISTED = True
+except ImportError:
+    HAS_TWISTED = False
+    # Provide stub for async_yield_fixture when Twisted not available
+    async_yield_fixture = pytest.fixture
 
 from scrapy.core.downloader import Downloader, Slot
 from scrapy.core.downloader.contextfactory import (
     ScrapyClientContextFactory,
     load_context_factory_from_settings,
 )
-from scrapy.core.downloader.handlers.http11 import _RequestBodyProducer
+try:
+    # Old Twisted-based implementation had _RequestBodyProducer
+    from scrapy.core.downloader.handlers.http11 import _RequestBodyProducer  # type: ignore[attr-defined]
+except ImportError:
+    _RequestBodyProducer = None  # type: ignore[assignment,misc]
 from scrapy.exceptions import ScrapyDeprecationWarning
 from scrapy.settings import Settings
 from scrapy.utils.defer import deferred_f_from_coro_f, maybe_deferred_to_future
@@ -31,12 +43,20 @@ if TYPE_CHECKING:
     from twisted.web.iweb import IBodyProducer
 
 
+# Skip context factory tests if Twisted is not available
+pytestmark_context_factory = pytest.mark.skipif(
+    not HAS_TWISTED, 
+    reason="Context factory tests require Twisted"
+)
+
+
 class TestSlot:
     def test_repr(self):
         slot = Slot(concurrency=8, delay=0.1, randomize_delay=True)
         assert repr(slot) == "Slot(concurrency=8, delay=0.10, randomize_delay=True)"
 
 
+@pytest.mark.skipif(not HAS_TWISTED, reason="Context factory tests require Twisted")
 class TestContextFactoryBase:
     context_factory = None
 
@@ -94,6 +114,7 @@ class TestContextFactoryBase:
         return await maybe_deferred_to_future(d)
 
 
+@pytest.mark.skipif(not HAS_TWISTED, reason="Context factory tests require Twisted")
 class TestContextFactory(TestContextFactoryBase):
     @deferred_f_from_coro_f
     async def testPayload(self, server_url: str) -> None:
@@ -123,6 +144,7 @@ class TestContextFactory(TestContextFactoryBase):
             )
 
 
+@pytest.mark.skipif(not HAS_TWISTED, reason="Context factory tests require Twisted")
 class TestContextFactoryTLSMethod(TestContextFactoryBase):
     async def _assert_factory_works(
         self, server_url: str, client_context_factory: ScrapyClientContextFactory

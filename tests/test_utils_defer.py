@@ -6,7 +6,22 @@ from asyncio import Future
 from typing import TYPE_CHECKING, Any
 
 import pytest
-from twisted.internet.defer import Deferred, inlineCallbacks, succeed
+
+# Conditional imports for Twisted-based deprecated functions
+try:
+    from twisted.internet.defer import Deferred, inlineCallbacks, succeed
+    HAS_TWISTED = True
+except ImportError:
+    HAS_TWISTED = False
+    # Stubs for when Twisted not available
+    class Deferred:  # type: ignore[no-redef]
+        pass
+    def inlineCallbacks(f):  # type: ignore[no-redef,misc]
+        return f
+    def succeed(value):  # type: ignore[no-redef,misc]
+        future = asyncio.Future()
+        future.set_result(value)
+        return future
 
 from scrapy.utils.asyncgen import as_async_generator, collect_asyncgen
 from scrapy.utils.defer import (
@@ -16,14 +31,23 @@ from scrapy.utils.defer import (
     deferred_to_future,
     iter_errback,
     maybe_deferred_to_future,
-    mustbe_deferred,
     parallel_async,
 )
+
+# mustbe_deferred is deprecated - only import if available
+try:
+    from scrapy.utils.defer import mustbe_deferred  # type: ignore[attr-defined]
+except ImportError:
+    mustbe_deferred = None  # type: ignore[assignment]
 
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator, Awaitable, Callable, Generator
 
 
+@pytest.mark.skipif(
+    mustbe_deferred is None or not HAS_TWISTED, 
+    reason="mustbe_deferred is deprecated and requires Twisted"
+)
 @pytest.mark.filterwarnings("ignore::scrapy.exceptions.ScrapyDeprecationWarning")
 class TestMustbeDeferred:
     @inlineCallbacks

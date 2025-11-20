@@ -11,21 +11,35 @@ from unittest import mock
 from urllib.parse import urlencode
 
 import pytest
-from pytest_twisted import async_yield_fixture
-from twisted.internet.defer import (
-    CancelledError,
-    Deferred,
-    DeferredList,
-    inlineCallbacks,
+
+# This file tests the deprecated HTTP/2 client protocol which requires Twisted
+# Skip all tests if Twisted is not available
+try:
+    from pytest_twisted import async_yield_fixture
+    from twisted.internet.defer import (
+        CancelledError,
+        Deferred,
+        DeferredList,
+        inlineCallbacks,
+    )
+    from twisted.internet.endpoints import SSL4ClientEndpoint, SSL4ServerEndpoint
+    from twisted.internet.error import TimeoutError as TxTimeoutError
+    from twisted.internet.ssl import Certificate, PrivateCertificate, optionsForClientTLS
+    from twisted.web.client import URI, ResponseFailed
+    from twisted.web.http import H2_ENABLED
+    from twisted.web.http import Request as TxRequest
+    from twisted.web.server import NOT_DONE_YET, Site
+    from twisted.web.static import File
+    HAS_TWISTED = True
+except ImportError:
+    HAS_TWISTED = False
+    H2_ENABLED = False
+    async_yield_fixture = pytest.fixture  # Stub when Twisted not available
+
+pytestmark = pytest.mark.skipif(
+    not HAS_TWISTED or not H2_ENABLED,
+    reason="HTTP/2 client protocol tests require Twisted with H2 support (deprecated functionality)"
 )
-from twisted.internet.endpoints import SSL4ClientEndpoint, SSL4ServerEndpoint
-from twisted.internet.error import TimeoutError as TxTimeoutError
-from twisted.internet.ssl import Certificate, PrivateCertificate, optionsForClientTLS
-from twisted.web.client import URI, ResponseFailed
-from twisted.web.http import H2_ENABLED
-from twisted.web.http import Request as TxRequest
-from twisted.web.server import NOT_DONE_YET, Site
-from twisted.web.static import File
 
 from scrapy.http import JsonRequest, Request, Response
 from scrapy.settings import Settings
