@@ -17,20 +17,40 @@ if TYPE_CHECKING:
 
     from scrapy.crawler import Crawler
     from scrapy.logformatter import LogFormatterResult
+    from scrapy.utils.defer import Failure
 
 
 logger = logging.getLogger(__name__)
 
 
 def failure_to_exc_info(
-    exception: BaseException,
-) -> tuple[type[BaseException], BaseException, TracebackType | None]:
-    """Extract exc_info from exception instances"""
-    return (
-        type(exception),
-        exception,
-        exception.__traceback__,
-    )
+    exception: BaseException | Failure,
+) -> tuple[type[BaseException], BaseException, TracebackType | None] | None:
+    """Extract exc_info from exception instances or Failure objects.
+    
+    Args:
+        exception: Either a BaseException or a Failure object
+        
+    Returns:
+        A tuple of (type, value, traceback) or None if not an exception
+    """
+    # Import here to avoid circular dependency
+    from scrapy.utils.defer import Failure
+    
+    if isinstance(exception, Failure):
+        return (
+            exception.type,
+            exception.value,
+            exception.__traceback__,
+        )
+    elif isinstance(exception, BaseException):
+        return (
+            type(exception),
+            exception,
+            exception.__traceback__,
+        )
+    else:
+        return None
 
 
 class TopLevelFormatter(logging.Filter):
