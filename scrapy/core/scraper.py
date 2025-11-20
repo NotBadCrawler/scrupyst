@@ -190,7 +190,7 @@ class Scraper:
         """
         if self.slot is None:
             raise RuntimeError("Scraper slot not assigned")
-        self.slot.closing = Deferred()
+        self.slot.closing = asyncio.Future()
         self._check_if_closing()
         await maybe_deferred_to_future(self.slot.closing)
         if self._itemproc_has_async["close_spider"]:
