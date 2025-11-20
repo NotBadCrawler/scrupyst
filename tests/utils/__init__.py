@@ -1,15 +1,10 @@
+import asyncio
 import os
 from pathlib import Path
 
-from twisted.internet.defer import Deferred
 
-
-def twisted_sleep(seconds):
-    from twisted.internet import reactor
-
-    d = Deferred()
-    reactor.callLater(seconds, d.callback, None)
-    return d
+async def asyncio_sleep(seconds):
+    await asyncio.sleep(seconds)
 
 
 def get_script_run_env() -> dict[str, str]:
