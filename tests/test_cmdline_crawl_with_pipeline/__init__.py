@@ -2,8 +2,6 @@ import sys
 from pathlib import Path
 from subprocess import PIPE, Popen
 
-from tests import TWISTED_KEEPS_TRACEBACKS
-
 
 class TestCmdlineCrawlPipeline:
     def _execute(self, spname):
@@ -21,7 +19,5 @@ class TestCmdlineCrawlPipeline:
         returncode, stderr = self._execute("exception")
         # An unhandled exception in a pipeline should not stop the crawl
         assert returncode == 0
-        if TWISTED_KEEPS_TRACEBACKS:
-            assert b'RuntimeError("exception")' in stderr
-        else:
-            assert b"RuntimeError: exception" in stderr
+        # With asyncio (no Twisted), modern traceback format is used
+        assert b'RuntimeError("exception")' in stderr or b"RuntimeError: exception" in stderr

@@ -102,6 +102,11 @@ These modules form the heart of Scrapy's architecture and have been successfully
    - Converted `_download` to async `_download_async`
    - Updated `_start_scheduled_request` to use async task scheduling
    - All Twisted dependencies removed
+   - **🔧 Bug fixes applied in Phase 5:**
+     - Fixed `self._closewait = Deferred()` → `asyncio.Future()`
+     - Fixed `.callback(None)` → `.set_result(None)` for Future
+     - Updated deprecated method type hints: `Deferred[...]` → `asyncio.Future[...]`
+     - Removed unnecessary `is_asyncio_available()` checks (always true now)
 
 2. **`scrapy/core/scheduler.py`** (~498 lines) - ✅ COMPLETED!
    - Removed Twisted Deferred import
@@ -162,6 +167,7 @@ All downloader components have been successfully migrated:
 
 6. **HTTP Handlers - All migrated:**
    - **`handlers/http11.py`** - ✅ Now wrapper for aiohttp-based handler
+     - **🔧 Bug fix in Phase 5:** Added missing `TunnelError` exception class
    - **`handlers/http11_aiohttp.py`** (380 lines) - ✅ NEW! Full aiohttp implementation
      - Complete rewrite using aiohttp.ClientSession
      - Connection pooling with TCPConnector
@@ -210,11 +216,11 @@ All downloader components have been successfully migrated:
    - `scrapy/pipelines/files.py` (708 lines) - ✅ COMPLETED! Migrated to ThreadPoolExecutor
    - `scrapy/core/http2/` (1133 lines) - ✅ COMPLETED! Marked as deprecated (replaced by http2_aiohttp)
 
-### Phase 5: Tests (55% Complete) 🔄
+### Phase 5: Tests (60% Complete) 🔄
 
 **Massive undertaking - 200+ test files, ~41,559 lines of test code**
 
-**Status:** In Progress - Infrastructure complete, 29 test files migrated!
+**Status:** In Progress - Infrastructure complete, 32 test files migrated!
 
 **Completed:**
 1. ✅ Updated test dependencies
@@ -233,7 +239,7 @@ All downloader components have been successfully migrated:
    - Replaced `twisted_sleep()` with `asyncio_sleep()` in tests/utils/__init__.py
    - Removed all Twisted Deferred and reactor imports from test utilities
 
-4. ✅ Migrated 29 test files (29/200+) - **NEW: 9 additional files migrated!**
+4. ✅ Migrated 32 test files (32/200+) - **NEW: 12 additional files migrated!**
    
    **Previously migrated (20 files):**
    - `test_dependencies.py` - Removed Twisted version checking
@@ -257,7 +263,7 @@ All downloader components have been successfully migrated:
    - `test_request_cb_kwargs.py` - 1 async test
    - `test_spider_start.py` - Replaced twisted_sleep
    
-   **Newly migrated (9 files):**
+   **Batch 1 - Previously migrated (9 files):**
    - ✅ `test_scheduler.py` - Removed @inlineCallbacks, converted to async/await
    - ✅ `test_spidermiddleware_httperror.py` - Removed @inlineCallbacks (3 tests)
    - ✅ `test_pipeline_crawl.py` - Removed @inlineCallbacks (5 tests)
@@ -267,6 +273,20 @@ All downloader components have been successfully migrated:
    - ✅ `test_engine_loop.py` - Replaced reactor with asyncio event loop
    - ✅ `test_spider.py` - Removed @inlineCallbacks (2 tests)
    - ✅ `test_spidermiddleware.py` - Replaced Deferred with asyncio.Future
+   
+   **Batch 2 - Current session (3 files):**
+   - ✅ `test_downloadermiddleware.py` (14 tests) - **FULLY MIGRATED & ALL PASSING!**
+     - Replaced `twisted.internet.defer.succeed` with `asyncio.Future().set_result()`
+     - Replaced `twisted.internet.defer.Deferred` with `asyncio.Future`
+     - Updated all decorators from `@deferred_f_from_coro_f` to `@pytest.mark.asyncio`
+     - Replaced `await succeed(42)` with `await asyncio.sleep(0)`
+     - Renamed test classes for clarity (DeferredMiddleware → FutureMiddleware)
+   - ✅ `tests/__init__.py` - Removed TWISTED_KEEPS_TRACEBACKS and Twisted version imports
+   - ✅ `test_cmdline_crawl_with_pipeline/__init__.py` - Updated traceback format checking for asyncio
+   - 🔄 `test_engine.py` - **IN PROGRESS** (decorators migrated, needs debugging)
+     - Replaced all `@deferred_f_from_coro_f` with `@pytest.mark.asyncio`
+     - Converted `@inlineCallbacks` functions to `async/await`
+     - Some tests may hang (investigating)
 
 5. ✅ Mock server infrastructure (100% complete!)
    
