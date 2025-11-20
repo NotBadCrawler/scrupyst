@@ -1,3 +1,4 @@
+import pytest
 from testfixtures import LogCapture
 
 from scrapy import Request, Spider

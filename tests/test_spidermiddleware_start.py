@@ -1,3 +1,5 @@
+import pytest
+
 from scrapy.http import Request
 from scrapy.spidermiddlewares.start import StartSpiderMiddleware
 from scrapy.spiders import Spider

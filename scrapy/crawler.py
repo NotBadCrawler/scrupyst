@@ -405,7 +405,8 @@ class CrawlerRunner(CrawlerRunnerBase):
 
     def _crawl(self, crawler: Crawler, *args: Any, **kwargs: Any) -> asyncio.Task[None]:
         self.crawlers.add(crawler)
-        task = asyncio.create_task(crawler.crawl_async(*args, **kwargs))
+        loop = asyncio.get_event_loop()
+        task = loop.create_task(crawler.crawl_async(*args, **kwargs))
         self._active.add(task)
 
         def _done(_: asyncio.Task[None]) -> None:

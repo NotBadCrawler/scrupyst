@@ -212,6 +212,8 @@ markers = [
     "requires_botocore: marks tests that need botocore (but not boto3)",
     "requires_boto3: marks tests that need botocore and boto3",
     "requires_mitmproxy: marks tests that need mitmproxy",
+    "only_asyncio: marks tests that only work with asyncio (legacy marker, now always enabled)",
+    "only_not_asyncio: marks tests that only work with Twisted (legacy marker, now skipped)",
 ]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"

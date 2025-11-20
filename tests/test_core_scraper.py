@@ -2,13 +2,13 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+import pytest
+
 from scrapy.utils.defer import maybe_deferred_to_future
 from scrapy.utils.test import get_crawler
 from tests.spiders import SimpleSpider
 
 if TYPE_CHECKING:
-    import pytest
-
     from tests.mockserver.http import MockServer
 
 

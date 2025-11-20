@@ -5,6 +5,8 @@ from collections import deque
 from logging import ERROR
 from typing import TYPE_CHECKING
 
+import pytest
+
 from scrapy import Request, Spider, signals
 from scrapy.utils.defer import maybe_deferred_to_future
 from scrapy.utils.test import get_crawler
@@ -12,8 +14,6 @@ from tests.mockserver.http import MockServer
 from tests.test_scheduler import MemoryScheduler
 
 if TYPE_CHECKING:
-    import pytest
-
     from scrapy.http import Response
 
 

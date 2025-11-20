@@ -65,6 +65,13 @@ def requires_uvloop(request):
 
 
 @pytest.fixture(autouse=True)
+def skip_only_not_asyncio(request):
+    """Skip tests marked with only_not_asyncio since we're now asyncio-only."""
+    if request.node.get_closest_marker("only_not_asyncio"):
+        pytest.skip("Test is marked as only_not_asyncio (Twisted-only), skipping in asyncio mode")
+
+
+@pytest.fixture(autouse=True)
 def requires_botocore(request):
     if not request.node.get_closest_marker("requires_botocore"):
         return
