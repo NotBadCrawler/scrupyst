@@ -32,6 +32,8 @@ def send_catch_log(
     """Like ``pydispatcher.robust.sendRobust()`` but it also logs errors and returns
     exceptions instead of raising them.
     """
+    from scrapy.utils.defer import Failure
+    
     dont_log = named.pop("dont_log", ())
     dont_log = tuple(dont_log) if isinstance(dont_log, Sequence) else (dont_log,)
     dont_log += (StopDownload,)
@@ -57,9 +59,9 @@ def send_catch_log(
             else:
                 result = response
         except dont_log as e:
-            result = e
+            result = Failure(e)
         except Exception as e:
-            result = e
+            result = Failure(e)
             logger.error(
                 "Error caught on signal handler: %(receiver)s",
                 {"receiver": receiver},
@@ -81,6 +83,7 @@ async def send_catch_log_deferred(
 
     Returns a coroutine that completes once all signal handlers have finished.
     """
+    from scrapy.utils.defer import Failure
 
     async def call_handler(receiver: TypingAny) -> tuple[TypingAny, TypingAny]:
         """Call a signal handler and handle errors."""
@@ -102,7 +105,7 @@ async def send_catch_log_deferred(
                     exc_info=sys.exc_info(),
                     extra={"spider": spider},
                 )
-            return (receiver, e)
+            return (receiver, Failure(e))
 
     dont_log = named.pop("dont_log", None)
     spider = named.get("spider")

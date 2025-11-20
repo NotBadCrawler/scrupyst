@@ -28,6 +28,9 @@ class TestSendCatchLog:
                 arg="test",
                 handlers_called=handlers_called,
             )
+            # Await the result if it's a coroutine or awaitable
+            if asyncio.iscoroutine(result) or asyncio.isfuture(result):
+                result = await result
 
         assert self.error_handler in handlers_called
         assert self.ok_handler in handlers_called
@@ -125,5 +128,5 @@ class TestSendCatchLog2:
         with LogCapture() as log:
             send_catch_log(test_signal)
         assert len(log.records) == 1
-        assert "Cannot return deferreds from signal handler" in str(log)
+        assert "Cannot return coroutines from synchronous signal handler" in str(log)
         dispatcher.disconnect(test_handler, test_signal)

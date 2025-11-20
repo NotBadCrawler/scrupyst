@@ -40,9 +40,15 @@ class Failure:
         """
         if exc_value is None:
             import sys
-            exc_value = sys.exc_info()[1]
+            exc_info = sys.exc_info()
+            exc_value = exc_info[1]
             if exc_value is None:
                 raise ValueError("Failure() with no exception")
+            # Capture traceback from exc_info
+            self.__traceback__ = exc_info[2]
+        else:
+            # If exc_value is provided, use its traceback
+            self.__traceback__ = getattr(exc_value, '__traceback__', None)
         
         self.value: BaseException = exc_value
         self.type: type[BaseException] = exc_type or type(exc_value)
