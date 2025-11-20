@@ -1,7 +1,6 @@
 import asyncio
 
 import pytest
-from twisted.internet.defer import Deferred, inlineCallbacks, succeed
 
 from scrapy import Request, Spider, signals
 from scrapy.crawler import Crawler
@@ -43,27 +42,27 @@ class DeferredPipeline:
         return item
 
     def process_item(self, item):
-        d = Deferred()
-        d.addCallback(self.cb)
-        d.callback(item)
-        return d
+        f = asyncio.Future()
+        f.add_done_callback(lambda _: None)  # callback compatibility
+        f.set_result(self.cb(item))
+        return f
 
 
 class AsyncDefPipeline:
     async def process_item(self, item):
-        d = Deferred()
-        call_later(0, d.callback, None)
-        await maybe_deferred_to_future(d)
+        f = asyncio.Future()
+        call_later(0, f.set_result, None)
+        await f
         item["pipeline_passed"] = True
         return item
 
 
 class AsyncDefAsyncioPipeline:
     async def process_item(self, item):
-        d = Deferred()
+        f = asyncio.Future()
         loop = asyncio.get_event_loop()
-        loop.call_later(0, d.callback, None)
-        await deferred_to_future(d)
+        loop.call_later(0, f.set_result, None)
+        await f
         await asyncio.sleep(0.2)
         item["pipeline_passed"] = await get_from_asyncio_queue(True)
         return item
@@ -71,14 +70,14 @@ class AsyncDefAsyncioPipeline:
 
 class AsyncDefNotAsyncioPipeline:
     async def process_item(self, item):
-        d1 = Deferred()
-        from twisted.internet import reactor
+        f1 = asyncio.Future()
+        loop = asyncio.get_event_loop()
 
-        reactor.callLater(0, d1.callback, None)
-        await d1
-        d2 = Deferred()
-        reactor.callLater(0, d2.callback, None)
-        await maybe_deferred_to_future(d2)
+        loop.call_later(0, f1.set_result, None)
+        await f1
+        f2 = asyncio.Future()
+        loop.call_later(0, f2.set_result, None)
+        await f2
         item["pipeline_passed"] = True
         return item
 
@@ -117,36 +116,34 @@ class TestPipeline:
         self.items = []
         return crawler
 
-    @inlineCallbacks
-    def test_simple_pipeline(self):
+    @pytest.mark.asyncio
+    async def test_simple_pipeline(self):
         crawler = self._create_crawler(SimplePipeline)
-        yield crawler.crawl(mockserver=self.mockserver)
+        await crawler.crawl(mockserver=self.mockserver)
         assert len(self.items) == 1
 
-    @inlineCallbacks
-    def test_deferred_pipeline(self):
+    @pytest.mark.asyncio
+    async def test_deferred_pipeline(self):
         crawler = self._create_crawler(DeferredPipeline)
-        yield crawler.crawl(mockserver=self.mockserver)
+        await crawler.crawl(mockserver=self.mockserver)
         assert len(self.items) == 1
 
-    @inlineCallbacks
-    def test_asyncdef_pipeline(self):
+    @pytest.mark.asyncio
+    async def test_asyncdef_pipeline(self):
         crawler = self._create_crawler(AsyncDefPipeline)
-        yield crawler.crawl(mockserver=self.mockserver)
+        await crawler.crawl(mockserver=self.mockserver)
         assert len(self.items) == 1
 
-    @pytest.mark.only_asyncio
-    @inlineCallbacks
-    def test_asyncdef_asyncio_pipeline(self):
+    @pytest.mark.asyncio
+    async def test_asyncdef_asyncio_pipeline(self):
         crawler = self._create_crawler(AsyncDefAsyncioPipeline)
-        yield crawler.crawl(mockserver=self.mockserver)
+        await crawler.crawl(mockserver=self.mockserver)
         assert len(self.items) == 1
 
-    @pytest.mark.only_not_asyncio
-    @inlineCallbacks
-    def test_asyncdef_not_asyncio_pipeline(self):
+    @pytest.mark.asyncio
+    async def test_asyncdef_not_asyncio_pipeline(self):
         crawler = self._create_crawler(AsyncDefNotAsyncioPipeline)
-        yield crawler.crawl(mockserver=self.mockserver)
+        await crawler.crawl(mockserver=self.mockserver)
         assert len(self.items) == 1
 
     @deferred_f_from_coro_f
@@ -288,15 +285,21 @@ class TestCustomPipelineManager:
                 return cls(crawler)
 
             def open_spider(self, spider):
-                return succeed(None)
+                f = asyncio.Future()
+                f.set_result(None)
+                return f
 
             def close_spider(self, spider):
-                return succeed(None)
+                f = asyncio.Future()
+                f.set_result(None)
+                return f
 
             def process_item(self, item, spider):
                 for pipeline in self.pipelines:
                     item = pipeline.process_item(item)
-                return succeed(item)
+                f = asyncio.Future()
+                f.set_result(item)
+                return f
 
         items = []
 
