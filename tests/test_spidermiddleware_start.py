@@ -1,13 +1,13 @@
 from scrapy.http import Request
 from scrapy.spidermiddlewares.start import StartSpiderMiddleware
 from scrapy.spiders import Spider
-from scrapy.utils.defer import deferred_f_from_coro_f
+# Removed deferred_f_from_coro_f import
 from scrapy.utils.misc import build_from_crawler
 from scrapy.utils.test import get_crawler
 
 
 class TestMiddleware:
-    @deferred_f_from_coro_f
+    @pytest.mark.asyncio
     async def test_async(self):
         crawler = get_crawler(Spider)
         mw = build_from_crawler(StartSpiderMiddleware, crawler)
@@ -24,7 +24,7 @@ class TestMiddleware:
         ]
         assert result == [True, True, False, "foo"]
 
-    @deferred_f_from_coro_f
+    @pytest.mark.asyncio
     async def test_sync(self):
         crawler = get_crawler(Spider)
         mw = build_from_crawler(StartSpiderMiddleware, crawler)

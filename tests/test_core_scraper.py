@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from scrapy.utils.defer import deferred_f_from_coro_f, maybe_deferred_to_future
+from scrapy.utils.defer import maybe_deferred_to_future
 from scrapy.utils.test import get_crawler
 from tests.spiders import SimpleSpider
 
@@ -12,7 +12,7 @@ if TYPE_CHECKING:
     from tests.mockserver.http import MockServer
 
 
-@deferred_f_from_coro_f
+@pytest.mark.asyncio
 async def test_scraper_exception(
     mockserver: MockServer,
     caplog: pytest.LogCaptureFixture,

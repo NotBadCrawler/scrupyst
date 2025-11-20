@@ -9,7 +9,7 @@ from testfixtures import LogCapture
 
 from scrapy import Spider, signals
 from scrapy.exceptions import ScrapyDeprecationWarning
-from scrapy.utils.defer import deferred_f_from_coro_f, maybe_deferred_to_future
+from scrapy.utils.defer import maybe_deferred_to_future
 from scrapy.utils.test import get_crawler
 
 from .utils import asyncio_sleep
@@ -37,7 +37,7 @@ class TestMain:
         assert crawler.stats.get_value("finish_reason") == "finished"
         assert actual_items == expected_items
 
-    @deferred_f_from_coro_f
+    @pytest.mark.asyncio
     async def test_start_urls(self):
         class TestSpider(Spider):
             name = "test"
@@ -50,7 +50,7 @@ class TestMain:
             warnings.simplefilter("error")
             await self._test_spider(TestSpider, [ITEM_A])
 
-    @deferred_f_from_coro_f
+    @pytest.mark.asyncio
     async def test_start(self):
         class TestSpider(Spider):
             name = "test"
@@ -62,7 +62,7 @@ class TestMain:
             warnings.simplefilter("error")
             await self._test_spider(TestSpider, [ITEM_A])
 
-    @deferred_f_from_coro_f
+    @pytest.mark.asyncio
     async def test_start_subclass(self):
         class BaseSpider(Spider):
             async def start(self):
@@ -75,7 +75,7 @@ class TestMain:
             warnings.simplefilter("error")
             await self._test_spider(TestSpider, [ITEM_A])
 
-    @deferred_f_from_coro_f
+    @pytest.mark.asyncio
     async def test_deprecated(self):
         class TestSpider(Spider):
             name = "test"
@@ -86,7 +86,7 @@ class TestMain:
         with pytest.warns(ScrapyDeprecationWarning):
             await self._test_spider(TestSpider, [ITEM_A])
 
-    @deferred_f_from_coro_f
+    @pytest.mark.asyncio
     async def test_deprecated_subclass(self):
         class BaseSpider(Spider):
             def start_requests(self):
@@ -99,7 +99,7 @@ class TestMain:
         with pytest.warns(ScrapyDeprecationWarning, match="BaseSpider"):
             await self._test_spider(TestSpider, [ITEM_A])
 
-    @deferred_f_from_coro_f
+    @pytest.mark.asyncio
     async def test_universal(self):
         class TestSpider(Spider):
             name = "test"
@@ -114,7 +114,7 @@ class TestMain:
             warnings.simplefilter("error")
             await self._test_spider(TestSpider, [ITEM_A])
 
-    @deferred_f_from_coro_f
+    @pytest.mark.asyncio
     async def test_universal_subclass(self):
         class BaseSpider(Spider):
             async def start(self):
@@ -130,7 +130,7 @@ class TestMain:
             warnings.simplefilter("error")
             await self._test_spider(TestSpider, [ITEM_A])
 
-    @deferred_f_from_coro_f
+    @pytest.mark.asyncio
     async def test_start_deprecated_super(self):
         class TestSpider(Spider):
             name = "test"
@@ -153,7 +153,7 @@ class TestMain:
         await self._test_spider(TestSpider, expected_items)
 
     @pytest.mark.only_asyncio
-    @deferred_f_from_coro_f
+    @pytest.mark.asyncio
     async def test_asyncio_delayed(self):
         async def start(spider):
             await sleep(SLEEP_SECONDS)
@@ -161,7 +161,7 @@ class TestMain:
 
         await self._test_start(start, [ITEM_A])
 
-    @deferred_f_from_coro_f
+    @pytest.mark.asyncio
     async def test_asyncio_delayed(self):
         async def start(spider):
             await asyncio_sleep(SLEEP_SECONDS)
@@ -171,7 +171,7 @@ class TestMain:
 
     # Exceptions
 
-    @deferred_f_from_coro_f
+    @pytest.mark.asyncio
     async def test_deprecated_non_generator_exception(self):
         class TestSpider(Spider):
             name = "test"
