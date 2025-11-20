@@ -12,7 +12,7 @@ from scrapy.exceptions import ScrapyDeprecationWarning
 from scrapy.utils.defer import deferred_f_from_coro_f, maybe_deferred_to_future
 from scrapy.utils.test import get_crawler
 
-from .utils import twisted_sleep
+from .utils import asyncio_sleep
 
 SLEEP_SECONDS = 0.1
 
@@ -162,9 +162,9 @@ class TestMain:
         await self._test_start(start, [ITEM_A])
 
     @deferred_f_from_coro_f
-    async def test_twisted_delayed(self):
+    async def test_asyncio_delayed(self):
         async def start(spider):
-            await maybe_deferred_to_future(twisted_sleep(SLEEP_SECONDS))
+            await asyncio_sleep(SLEEP_SECONDS)
             yield ITEM_A
 
         await self._test_start(start, [ITEM_A])

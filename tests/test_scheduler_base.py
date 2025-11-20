@@ -2,10 +2,9 @@ from __future__ import annotations
 
 from urllib.parse import urljoin
 
+import asyncio
 import pytest
 from testfixtures import LogCapture
-from twisted.internet import defer
-from twisted.internet.defer import inlineCallbacks
 
 from scrapy.core.scheduler import BaseScheduler
 from scrapy.http import Request
@@ -41,11 +40,11 @@ class MinimalScheduler:
 
 
 class SimpleScheduler(MinimalScheduler):
-    def open(self, spider: Spider) -> defer.Deferred:
-        return defer.succeed("open")
+    async def open(self, spider: Spider) -> str:
+        return "open"
 
-    def close(self, reason: str) -> defer.Deferred:
-        return defer.succeed("close")
+    async def close(self, reason: str) -> str:
+        return "close"
 
     def __len__(self) -> int:
         return len(self.requests)
@@ -118,9 +117,9 @@ class TestSimpleScheduler(InterfaceCheckMixin):
     def setup_method(self):
         self.scheduler = SimpleScheduler()
 
-    @inlineCallbacks
-    def test_enqueue_dequeue(self):
-        open_result = yield self.scheduler.open(Spider("foo"))
+    @pytest.mark.asyncio
+    async def test_enqueue_dequeue(self):
+        open_result = await self.scheduler.open(Spider("foo"))
         assert open_result == "open"
         assert not self.scheduler.has_pending_requests()
 
@@ -140,22 +139,22 @@ class TestSimpleScheduler(InterfaceCheckMixin):
         assert not self.scheduler.has_pending_requests()
         assert len(self.scheduler) == 0
 
-        close_result = yield self.scheduler.close("")
+        close_result = await self.scheduler.close("")
         assert close_result == "close"
 
 
 class TestMinimalSchedulerCrawl:
     scheduler_cls = MinimalScheduler
 
-    @inlineCallbacks
-    def test_crawl(self):
+    @pytest.mark.asyncio
+    async def test_crawl(self):
         with MockServer() as mockserver:
             settings = {
                 "SCHEDULER": self.scheduler_cls,
             }
             with LogCapture() as log:
                 crawler = get_crawler(PathsSpider, settings)
-                yield crawler.crawl(mockserver)
+                await crawler.crawl(mockserver)
             for path in PATHS:
                 assert f"{{'path': '{path}'}}" in str(log)
             assert f"'item_scraped_count': {len(PATHS)}" in str(log)

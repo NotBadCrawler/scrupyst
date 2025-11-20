@@ -2,14 +2,13 @@ import logging
 
 import pytest
 from testfixtures import LogCapture
-from twisted.internet.defer import inlineCallbacks
-from twisted.python.failure import Failure
 
 from scrapy.exceptions import DropItem
 from scrapy.http import Request, Response
 from scrapy.item import Field, Item
 from scrapy.logformatter import LogFormatter
 from scrapy.spiders import Spider
+from scrapy.utils.defer import Failure
 from scrapy.utils.test import get_crawler
 from tests.mockserver.http import MockServer
 from tests.spiders import ItemSpider
@@ -271,22 +270,22 @@ class TestShowOrSkipMessages:
             },
         }
 
-    @inlineCallbacks
-    def test_show_messages(self):
+    @pytest.mark.asyncio
+    async def test_show_messages(self):
         crawler = get_crawler(ItemSpider, self.base_settings)
         with LogCapture() as lc:
-            yield crawler.crawl(mockserver=self.mockserver)
+            await crawler.crawl(mockserver=self.mockserver)
         assert "Scraped from <200 http://127.0.0.1:" in str(lc)
         assert "Crawled (200) <GET http://127.0.0.1:" in str(lc)
         assert "Dropped: Ignoring item" in str(lc)
 
-    @inlineCallbacks
-    def test_skip_messages(self):
+    @pytest.mark.asyncio
+    async def test_skip_messages(self):
         settings = self.base_settings.copy()
         settings["LOG_FORMATTER"] = SkipMessagesLogFormatter
         crawler = get_crawler(ItemSpider, settings)
         with LogCapture() as lc:
-            yield crawler.crawl(mockserver=self.mockserver)
+            await crawler.crawl(mockserver=self.mockserver)
         assert "Scraped from <200 http://127.0.0.1:" not in str(lc)
         assert "Crawled (200) <GET http://127.0.0.1:" not in str(lc)
         assert "Dropped: Ignoring item" not in str(lc)

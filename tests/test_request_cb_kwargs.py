@@ -1,5 +1,5 @@
+import pytest
 from testfixtures import LogCapture
-from twisted.internet.defer import inlineCallbacks
 
 from scrapy.http import Request
 from scrapy.utils.test import get_crawler
@@ -158,11 +158,11 @@ class TestCallbackKeywordArguments:
     def teardown_class(cls):
         cls.mockserver.__exit__(None, None, None)
 
-    @inlineCallbacks
-    def test_callback_kwargs(self):
+    @pytest.mark.asyncio
+    async def test_callback_kwargs(self):
         crawler = get_crawler(KeywordArgumentsSpider)
         with LogCapture() as log:
-            yield crawler.crawl(mockserver=self.mockserver)
+            await crawler.crawl(mockserver=self.mockserver)
         assert all(crawler.spider.checks)
         assert len(crawler.spider.checks) == crawler.stats.get_value("boolean_checks")
         # check exceptions for argument mismatch

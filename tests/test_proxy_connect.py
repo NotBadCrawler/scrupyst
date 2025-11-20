@@ -8,7 +8,6 @@ from urllib.parse import urlsplit, urlunsplit
 
 import pytest
 from testfixtures import LogCapture
-from twisted.internet.defer import inlineCallbacks
 
 from scrapy.http import Request
 from scrapy.utils.test import get_crawler
@@ -83,29 +82,29 @@ class TestProxyConnect:
         self._proxy.stop()
         os.environ = self._oldenv
 
-    @inlineCallbacks
-    def test_https_connect_tunnel(self):
+    @pytest.mark.asyncio
+    async def test_https_connect_tunnel(self):
         crawler = get_crawler(SimpleSpider)
         with LogCapture() as log:
-            yield crawler.crawl(self.mockserver.url("/status?n=200", is_secure=True))
+            await crawler.crawl(self.mockserver.url("/status?n=200", is_secure=True))
         self._assert_got_response_code(200, log)
 
-    @inlineCallbacks
-    def test_https_tunnel_auth_error(self):
+    @pytest.mark.asyncio
+    async def test_https_tunnel_auth_error(self):
         os.environ["https_proxy"] = _wrong_credentials(os.environ["https_proxy"])
         crawler = get_crawler(SimpleSpider)
         with LogCapture() as log:
-            yield crawler.crawl(self.mockserver.url("/status?n=200", is_secure=True))
+            await crawler.crawl(self.mockserver.url("/status?n=200", is_secure=True))
         # The proxy returns a 407 error code but it does not reach the client;
         # he just sees a TunnelError.
         self._assert_got_tunnel_error(log)
 
-    @inlineCallbacks
-    def test_https_tunnel_without_leak_proxy_authorization_header(self):
+    @pytest.mark.asyncio
+    async def test_https_tunnel_without_leak_proxy_authorization_header(self):
         request = Request(self.mockserver.url("/echo", is_secure=True))
         crawler = get_crawler(SingleRequestSpider)
         with LogCapture() as log:
-            yield crawler.crawl(seed=request)
+            await crawler.crawl(seed=request)
         self._assert_got_response_code(200, log)
         echo = json.loads(crawler.spider.meta["responses"][0].text)
         assert "Proxy-Authorization" not in echo["headers"]

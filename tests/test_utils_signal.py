@@ -3,12 +3,9 @@ import asyncio
 import pytest
 from pydispatch import dispatcher
 from testfixtures import LogCapture
-from twisted.internet import defer
-from twisted.internet.defer import inlineCallbacks
-from twisted.python.failure import Failure
 
 from scrapy.utils.asyncio import call_later
-from scrapy.utils.defer import deferred_from_coro
+from scrapy.utils.defer import Failure, deferred_from_coro
 from scrapy.utils.signal import (
     send_catch_log,
     send_catch_log_async,
@@ -18,16 +15,15 @@ from scrapy.utils.test import get_from_asyncio_queue
 
 
 class TestSendCatchLog:
-    @inlineCallbacks
-    def test_send_catch_log(self):
+    @pytest.mark.asyncio
+    async def test_send_catch_log(self):
         test_signal = object()
         handlers_called = set()
 
         dispatcher.connect(self.error_handler, signal=test_signal)
         dispatcher.connect(self.ok_handler, signal=test_signal)
         with LogCapture() as log:
-            result = yield defer.maybeDeferred(
-                self._get_result,
+            result = self._get_result(
                 test_signal,
                 arg="test",
                 handlers_called=handlers_called,
@@ -68,20 +64,19 @@ class TestSendCatchLogDeferred2(TestSendCatchLogDeferred):
     def ok_handler(self, arg, handlers_called):
         handlers_called.add(self.ok_handler)
         assert arg == "test"
-        d = defer.Deferred()
-        call_later(0, d.callback, "OK")
-        return d
+        future = asyncio.Future()
+        call_later(0, future.set_result, "OK")
+        return future
 
 
 class TestSendCatchLogDeferredAsyncDef(TestSendCatchLogDeferred):
     async def ok_handler(self, arg, handlers_called):
         handlers_called.add(self.ok_handler)
         assert arg == "test"
-        await defer.succeed(42)
+        await asyncio.sleep(0)  # yield control
         return "OK"
 
 
-@pytest.mark.only_asyncio
 class TestSendCatchLogDeferredAsyncio(TestSendCatchLogDeferred):
     async def ok_handler(self, arg, handlers_called):
         handlers_called.add(self.ok_handler)
@@ -99,20 +94,19 @@ class TestSendCatchLogAsync2(TestSendCatchLogAsync):
     def ok_handler(self, arg, handlers_called):
         handlers_called.add(self.ok_handler)
         assert arg == "test"
-        d = defer.Deferred()
-        call_later(0, d.callback, "OK")
-        return d
+        future = asyncio.Future()
+        call_later(0, future.set_result, "OK")
+        return future
 
 
 class TestSendCatchLogAsyncAsyncDef(TestSendCatchLogAsync):
     async def ok_handler(self, arg, handlers_called):
         handlers_called.add(self.ok_handler)
         assert arg == "test"
-        await defer.succeed(42)
+        await asyncio.sleep(0)  # yield control
         return "OK"
 
 
-@pytest.mark.only_asyncio
 class TestSendCatchLogAsyncAsyncio(TestSendCatchLogAsync):
     async def ok_handler(self, arg, handlers_called):
         handlers_called.add(self.ok_handler)
@@ -122,9 +116,9 @@ class TestSendCatchLogAsyncAsyncio(TestSendCatchLogAsync):
 
 
 class TestSendCatchLog2:
-    def test_error_logged_if_deferred_not_supported(self):
+    def test_error_logged_if_future_not_supported(self):
         def test_handler():
-            return defer.Deferred()
+            return asyncio.Future()
 
         test_signal = object()
         dispatcher.connect(test_handler, test_signal)

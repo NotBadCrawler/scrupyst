@@ -3,9 +3,9 @@ import datetime
 import json
 from decimal import Decimal
 
+import asyncio
 import attr
 import pytest
-from twisted.internet import defer
 
 from scrapy.http import Request, Response
 from scrapy.utils.serialize import ScrapyJSONEncoder
@@ -42,8 +42,10 @@ class TestJsonEncoder:
         ]:
             assert encoder.encode(input_) == json.dumps(output, sort_keys=True)
 
-    def test_encode_deferred(self, encoder: ScrapyJSONEncoder) -> None:
-        assert "Deferred" in encoder.encode(defer.Deferred())
+    def test_encode_future(self, encoder: ScrapyJSONEncoder) -> None:
+        # Test encoding an asyncio Future (replacement for Deferred)
+        future = asyncio.Future()
+        assert "Future" in encoder.encode(future)
 
     def test_encode_request(self, encoder: ScrapyJSONEncoder) -> None:
         r = Request("http://www.example.com/lala")

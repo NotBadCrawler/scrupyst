@@ -8,8 +8,6 @@ import asyncio
 import time
 from urllib.parse import urlencode
 
-from twisted.internet import defer
-
 from scrapy import signals
 from scrapy.exceptions import StopDownload
 from scrapy.http import Request
@@ -133,7 +131,8 @@ class AsyncDefSpider(SimpleSpider):
     name = "asyncdef"
 
     async def parse(self, response):
-        await defer.succeed(42)
+        # await an already-resolved value (equivalent to defer.succeed(42))
+        await asyncio.sleep(0)  # yield control briefly
         self.logger.info(f"Got response {response.status}")
 
 
