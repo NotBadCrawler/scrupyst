@@ -1,6 +1,5 @@
-The guidelines for contributing are available here:
+贡献指南可在此处获取：
 https://docs.scrapy.org/en/master/contributing.html
 
-Please do not abuse the issue tracker for support questions.
-If your issue topic can be rephrased to "How to ...?", please use the
-support channels to get it answered: https://scrapy.org/community/
+请不要滥用问题跟踪器来提出支持问题。
+如果您的问题可以改写为"如何...？"，请使用支持渠道来获得解答：https://scrapy.org/community/
