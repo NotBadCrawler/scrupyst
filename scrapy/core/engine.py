@@ -154,7 +154,7 @@ class ExecutionEngine:
             )
         return scheduler_cls
 
-    def start(self, _start_request_processing=True) -> Deferred[None]:
+    def start(self, _start_request_processing=True) -> asyncio.Future[None]:
         warnings.warn(
             "ExecutionEngine.start() is deprecated, use start_async() instead",
             ScrapyDeprecationWarning,
@@ -177,18 +177,13 @@ class ExecutionEngine:
             # require an opened spider when not run in scrapy shell
             return
         self.running = True
-        self._closewait = Deferred()
+        self._closewait = asyncio.Future()
         if _start_request_processing:
             coro = self._start_request_processing()
-            if is_asyncio_available():
-                # not wrapping in a Deferred here to avoid https://github.com/twisted/twisted/issues/12470
-                # (can happen when this is cancelled, e.g. in test_close_during_start_iteration())
-                self._start_request_processing_awaitable = asyncio.ensure_future(coro)
-            else:
-                self._start_request_processing_awaitable = Deferred.fromCoroutine(coro)
+            self._start_request_processing_awaitable = asyncio.ensure_future(coro)
         await maybe_deferred_to_future(self._closewait)
 
-    def stop(self) -> Deferred[None]:
+    def stop(self) -> asyncio.Future[None]:
         warnings.warn(
             "ExecutionEngine.stop() is deprecated, use stop_async() instead",
             ScrapyDeprecationWarning,
@@ -213,9 +208,9 @@ class ExecutionEngine:
             await self.close_spider_async(reason="shutdown")
         await self.signals.send_catch_log_async(signal=signals.engine_stopped)
         if self._closewait:
-            self._closewait.callback(None)
+            self._closewait.set_result(None)
 
-    def close(self) -> Deferred[None]:
+    def close(self) -> asyncio.Future[None]:
         warnings.warn(
             "ExecutionEngine.close() is deprecated, use close_async() instead",
             ScrapyDeprecationWarning,
@@ -431,8 +426,8 @@ class ExecutionEngine:
                 signals.request_dropped, request=request, spider=self.spider
             )
 
-    def download(self, request: Request) -> Deferred[Response]:
-        """Return a Deferred which fires with a Response as result, only downloader middlewares are applied"""
+    def download(self, request: Request) -> asyncio.Future[Response]:
+        """Return a Future which resolves with a Response as result, only downloader middlewares are applied"""
         warnings.warn(
             "ExecutionEngine.download() is deprecated, use download_async() instead",
             ScrapyDeprecationWarning,
@@ -494,7 +489,7 @@ class ExecutionEngine:
         finally:
             self._slot.nextcall.schedule()
 
-    def open_spider(self, spider: Spider, close_if_idle: bool = True) -> Deferred[None]:
+    def open_spider(self, spider: Spider, close_if_idle: bool = True) -> asyncio.Future[None]:
         warnings.warn(
             "ExecutionEngine.open_spider() is deprecated, use open_spider_async() instead",
             ScrapyDeprecationWarning,
@@ -548,7 +543,7 @@ class ExecutionEngine:
             assert isinstance(ex, CloseSpider)  # typing
             _schedule_coro(self.close_spider_async(reason=ex.reason))
 
-    def close_spider(self, spider: Spider, reason: str = "cancelled") -> Deferred[None]:
+    def close_spider(self, spider: Spider, reason: str = "cancelled") -> asyncio.Future[None]:
         warnings.warn(
             "ExecutionEngine.close_spider() is deprecated, use close_spider_async() instead",
             ScrapyDeprecationWarning,
