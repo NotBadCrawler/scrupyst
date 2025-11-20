@@ -210,11 +210,11 @@ All downloader components have been successfully migrated:
    - `scrapy/pipelines/files.py` (708 lines) - ✅ COMPLETED! Migrated to ThreadPoolExecutor
    - `scrapy/core/http2/` (1133 lines) - ✅ COMPLETED! Marked as deprecated (replaced by http2_aiohttp)
 
-### Phase 5: Tests (35% Complete) 🔄
+### Phase 5: Tests (40% Complete) 🔄
 
 **Massive undertaking - 200+ test files, ~41,559 lines of test code**
 
-**Status:** In Progress - Mock server HTTP infrastructure 100% complete!
+**Status:** In Progress - ALL Mock server infrastructure 100% complete!
 
 **Completed:**
 1. ✅ Updated test dependencies
@@ -286,10 +286,20 @@ All downloader components have been successfully migrated:
    - ✅ All HTTP handlers implemented (30 handlers)
    - ✅ All edge cases covered (chunked, broken, raw responses)
    - ✅ All routes mapped and ready
-   - 📝 DNS mock server (67 lines) - Needs asyncio DNS library
-   - 📝 FTP mock server (59 lines) - Can use aioftp
-   - 📝 Proxy echo server (17 lines) - Simple forwarding
-   - 📝 HTTPS variant (46 lines) - Should be straightforward
+   - ✅ DNS mock server (105 lines) - **NEW!** Pure asyncio UDP DNS server
+   - ✅ FTP mock server (59 lines) - Already asyncio-compatible (uses pyftpdlib)
+   - ✅ Proxy echo server (27 lines) - **NEW!** Asyncio version created
+   - ✅ HTTPS variant (58 lines) - **NEW!** Asyncio HTTPS server
+   
+   **All Mock Servers Complete:**
+   - ✅ `http_aiohttp.py` - Main HTTP mock server with 30+ routes
+   - ✅ `http_resources_aiohttp.py` - All 30 HTTP handlers
+   - ✅ `http_base_aiohttp.py` - Base mock server infrastructure
+   - ✅ `proxy_echo_aiohttp.py` - Proxy echo server for testing
+   - ✅ `simple_https_aiohttp.py` - Simple HTTPS server for SSL/TLS tests
+   - ✅ `dns_aiohttp.py` - DNS mock server using asyncio DatagramProtocol
+   - ✅ `ftp.py` - FTP server (already asyncio-compatible, no changes needed)
+   - ✅ `utils.py` - SSL context utilities for aiohttp
    
    - 🧪 Testing and validation of all mock servers
 
@@ -315,8 +325,8 @@ All downloader components have been successfully migrated:
    - Validate all tests pass
 
 **Estimated Completion:** 2-4 weeks of focused work
-**Current Progress:** ~35% (infrastructure + ALL HTTP mock server handlers + 2 test files)
-**Next Priority:** Complete DNS/FTP/Proxy mock servers, then begin migrating test files
+**Current Progress:** ~40% (infrastructure + ALL mock servers complete + 2 test files)
+**Next Priority:** Begin migrating test files to pytest-asyncio
 
 ### Phase 6: Documentation (0% Complete) 🚫
 
