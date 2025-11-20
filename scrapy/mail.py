@@ -6,7 +6,9 @@ See documentation in docs/topics/email.rst
 
 from __future__ import annotations
 
+import asyncio
 import logging
+import ssl as ssl_module
 from email import encoders as Encoders
 from email.mime.base import MIMEBase
 from email.mime.multipart import MIMEMultipart
@@ -16,18 +18,11 @@ from email.utils import formatdate
 from io import BytesIO
 from typing import IO, TYPE_CHECKING, Any
 
-from twisted.internet import ssl
-from twisted.internet.defer import Deferred
-
 from scrapy.utils.misc import arg_to_iter
 from scrapy.utils.python import to_bytes
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Sequence
-
-    # imports twisted.internet.reactor
-    from twisted.mail.smtp import ESMTPSenderFactory
-    from twisted.python.failure import Failure
 
     # typing.Self requires Python 3.11
     from typing_extensions import Self
@@ -93,9 +88,7 @@ class MailSender:
         mimetype: str = "text/plain",
         charset: str | None = None,
         _callback: Callable[..., None] | None = None,
-    ) -> Deferred[None] | None:
-        from twisted.internet import reactor
-
+    ) -> asyncio.Future[None] | None:
         msg: MIMEBase = (
             MIMEMultipart() if attachs else MIMENonMultipart(*mimetype.split("/", 1))
         )
@@ -143,13 +136,19 @@ class MailSender:
             )
             return None
 
-        dfd: Deferred[Any] = self._sendmail(
-            rcpts, msg.as_string().encode(charset or "utf-8")
+        future = asyncio.ensure_future(
+            self._sendmail_async(rcpts, msg.as_string().encode(charset or "utf-8"))
         )
-        dfd.addCallback(self._sent_ok, to, cc, subject, len(attachs))
-        dfd.addErrback(self._sent_failed, to, cc, subject, len(attachs))
-        reactor.addSystemEventTrigger("before", "shutdown", lambda: dfd)
-        return dfd
+        
+        def _handle_result(fut: asyncio.Future[None]) -> None:
+            try:
+                fut.result()
+                self._sent_ok(None, to, cc, subject, len(attachs))
+            except Exception as e:
+                self._sent_failed(e, to, cc, subject, len(attachs))
+        
+        future.add_done_callback(_handle_result)
+        return future
 
     def _sent_ok(
         self, result: Any, to: list[str], cc: list[str], subject: str, nattachs: int
@@ -167,13 +166,13 @@ class MailSender:
 
     def _sent_failed(
         self,
-        failure: Failure,
+        error: Exception,
         to: list[str],
         cc: list[str],
         subject: str,
         nattachs: int,
-    ) -> Failure:
-        errstr = str(failure.value)
+    ) -> None:
+        errstr = str(error)
         logger.error(
             "Unable to send mail: To=%(mailto)s Cc=%(mailcc)s "
             'Subject="%(mailsubject)s" Attachs=%(mailattachs)d'
@@ -186,46 +185,55 @@ class MailSender:
                 "mailerr": errstr,
             },
         )
-        return failure
 
-    def _sendmail(self, to_addrs: list[str], msg: bytes) -> Deferred[Any]:
-        from twisted.internet import reactor
+    async def _sendmail_async(self, to_addrs: list[str], msg: bytes) -> None:
+        """Send email using aiosmtplib or stdlib smtplib via executor."""
+        try:
+            # Try using aiosmtplib if available
+            import aiosmtplib  # noqa: PLC0415
 
-        msg_io = BytesIO(msg)
-        d: Deferred[Any] = Deferred()
+            smtp_kwargs = {
+                "hostname": self.smtphost,
+                "port": self.smtpport,
+                "use_tls": self.smtpssl,
+                "start_tls": self.smtptls and not self.smtpssl,
+            }
+            
+            if self.smtpuser and self.smtppass:
+                smtp_kwargs["username"] = self.smtpuser.decode("utf-8")
+                smtp_kwargs["password"] = self.smtppass.decode("utf-8")
 
-        factory = self._create_sender_factory(to_addrs, msg_io, d)
-
-        if self.smtpssl:
-            reactor.connectSSL(
-                self.smtphost, self.smtpport, factory, ssl.ClientContextFactory()
+            await aiosmtplib.send(
+                msg,
+                sender=self.mailfrom,
+                recipients=to_addrs,
+                **smtp_kwargs,
             )
-        else:
-            reactor.connectTCP(self.smtphost, self.smtpport, factory)
+        except ImportError:
+            # Fall back to using stdlib smtplib in executor
+            import smtplib  # noqa: PLC0415
+            
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(
+                None,
+                lambda: self._sendmail_sync(to_addrs, msg, smtplib),
+            )
 
-        return d
-
-    def _create_sender_factory(
-        self, to_addrs: list[str], msg: IO[bytes], d: Deferred[Any]
-    ) -> ESMTPSenderFactory:
-        # imports twisted.internet.reactor
-        from twisted.mail.smtp import ESMTPSenderFactory  # noqa: PLC0415
-
-        factory_keywords: dict[str, Any] = {
-            "heloFallback": True,
-            "requireAuthentication": False,
-            "requireTransportSecurity": self.smtptls,
-            "hostname": self.smtphost,
-        }
-
-        factory = ESMTPSenderFactory(
-            self.smtpuser,
-            self.smtppass,
-            self.mailfrom,
-            to_addrs,
-            msg,
-            d,
-            **factory_keywords,
-        )
-        factory.noisy = False
-        return factory
+    def _sendmail_sync(
+        self, to_addrs: list[str], msg: bytes, smtplib: Any
+    ) -> None:
+        """Synchronous fallback using stdlib smtplib."""
+        smtp_cls = smtplib.SMTP_SSL if self.smtpssl else smtplib.SMTP
+        
+        with smtp_cls(self.smtphost, self.smtpport) as smtp:
+            if self.smtptls and not self.smtpssl:
+                context = ssl_module.create_default_context()
+                smtp.starttls(context=context)
+            
+            if self.smtpuser and self.smtppass:
+                smtp.login(
+                    self.smtpuser.decode("utf-8"),
+                    self.smtppass.decode("utf-8"),
+                )
+            
+            smtp.sendmail(self.mailfrom, to_addrs, msg)

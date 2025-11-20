@@ -6,14 +6,13 @@ See documentation in docs/topics/shell.rst
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import os
 import signal
 from typing import TYPE_CHECKING, Any
 
 from itemadapter import is_item
-from twisted.internet import defer, threads
-from twisted.python import threadable
 from w3lib.url import any_to_uri
 
 import scrapy
@@ -25,7 +24,7 @@ from scrapy.spiders import Spider
 from scrapy.utils.conf import get_config
 from scrapy.utils.console import DEFAULT_PYTHON_SHELLS, start_python_console
 from scrapy.utils.datatypes import SequenceExclude
-from scrapy.utils.defer import _schedule_coro, deferred_f_from_coro_f
+from scrapy.utils.defer import _schedule_coro, ensure_awaitable
 from scrapy.utils.misc import load_object
 from scrapy.utils.reactor import is_asyncio_reactor_installed, set_asyncio_event_loop
 from scrapy.utils.response import open_in_browser
@@ -49,7 +48,7 @@ class Shell:
         )
         self.item_class: type = load_object(crawler.settings["DEFAULT_ITEM_CLASS"])
         self.spider: Spider | None = None
-        self.inthread: bool = not threadable.isInIOThread()
+        self.inthread: bool = False  # No longer using Twisted threads
         self.code: str | None = code
         self.vars: dict[str, Any] = {}
 
@@ -99,24 +98,21 @@ class Shell:
                 self.vars, shells=shells, banner=self.vars.pop("banner", "")
             )
 
-    def _schedule(self, request: Request, spider: Spider | None) -> defer.Deferred[Any]:
+    def _schedule(self, request: Request, spider: Spider | None) -> asyncio.Future[Any]:
         if is_asyncio_reactor_installed():
             # set the asyncio event loop for the current thread
             event_loop_path = self.crawler.settings["ASYNCIO_EVENT_LOOP"]
             set_asyncio_event_loop(event_loop_path)
 
-        def crawl_request(_):
+        async def crawl_and_wait():
+            await self._open_spider(request, spider)
             assert self.crawler.engine is not None
             self.crawler.engine.crawl(request)
+            result = await _request_future(request)
+            return (result, spider)
 
-        d2 = self._open_spider(request, spider)
-        d2.addCallback(crawl_request)
+        return asyncio.ensure_future(crawl_and_wait())
 
-        d = _request_deferred(request)
-        d.addCallback(lambda x: (x, spider))
-        return d
-
-    @deferred_f_from_coro_f
     async def _open_spider(self, request: Request, spider: Spider | None) -> None:
         if self.spider:
             return
@@ -137,8 +133,6 @@ class Shell:
         redirect: bool = True,
         **kwargs: Any,
     ) -> None:
-        from twisted.internet import reactor
-
         if isinstance(request_or_url, Request):
             request = request_or_url
         else:
@@ -152,9 +146,22 @@ class Shell:
                 request.meta["handle_httpstatus_all"] = True
         response = None
         with contextlib.suppress(IgnoreRequest):
-            response, spider = threads.blockingCallFromThread(
-                reactor, self._schedule, request, spider
-            )
+            # Run the async _schedule method synchronously
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                # If loop is already running, we need to schedule this in a new thread
+                # This is a fallback for complex scenarios
+                import concurrent.futures
+                with concurrent.futures.ThreadPoolExecutor() as executor:
+                    future = executor.submit(
+                        asyncio.run,
+                        self._schedule(request, spider)
+                    )
+                    response, spider = future.result()
+            else:
+                response, spider = loop.run_until_complete(
+                    self._schedule(request, spider)
+                )
         self.populate_vars(response, request, spider)
 
     def populate_vars(
@@ -218,16 +225,15 @@ def inspect_response(response: Response, spider: Spider) -> None:
     signal.signal(signal.SIGINT, sigint_handler)
 
 
-def _request_deferred(request: Request) -> defer.Deferred[Any]:
-    """Wrap a request inside a Deferred.
+def _request_future(request: Request) -> asyncio.Future[Any]:
+    """Wrap a request inside a Future.
 
     This function is harmful, do not use it until you know what you are doing.
 
-    This returns a Deferred whose first pair of callbacks are the request
-    callback and errback. The Deferred also triggers when the request
-    callback/errback is executed (i.e. when the request is downloaded)
+    This returns a Future that completes when the request callback/errback is 
+    executed (i.e. when the request is downloaded)
 
-    WARNING: Do not call request.replace() until after the deferred is called.
+    WARNING: Do not call request.replace() until after the future is completed.
     """
     request_callback = request.callback
     request_errback = request.errback
@@ -237,12 +243,29 @@ def _request_deferred(request: Request) -> defer.Deferred[Any]:
         request.errback = request_errback
         return result
 
-    d: defer.Deferred[Any] = defer.Deferred()
-    d.addBoth(_restore_callbacks)
-    if request.callback:
-        d.addCallback(request.callback)
-    if request.errback:
-        d.addErrback(request.errback)
+    future: asyncio.Future[Any] = asyncio.Future()
+    
+    def _callback(result: Any) -> Any:
+        result = _restore_callbacks(result)
+        if request_callback:
+            result = request_callback(result)
+        if not future.done():
+            future.set_result(result)
+        return result
+    
+    def _errback(failure: Any) -> Any:
+        _restore_callbacks(failure)
+        if request_errback:
+            result = request_errback(failure)
+            if not future.done():
+                future.set_result(result)
+        elif not future.done():
+            if isinstance(failure, Exception):
+                future.set_exception(failure)
+            else:
+                future.set_exception(Exception(str(failure)))
+        return failure
 
-    request.callback, request.errback = d.callback, d.errback
-    return d
+    request.callback = _callback
+    request.errback = _errback
+    return future
