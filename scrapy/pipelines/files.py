@@ -6,6 +6,7 @@ See documentation in topics/media-pipeline.rst
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import functools
 import hashlib
@@ -13,6 +14,7 @@ import logging
 import mimetypes
 import time
 from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import suppress
 from ftplib import FTP
 from io import BytesIO
@@ -21,8 +23,6 @@ from typing import IO, TYPE_CHECKING, Any, NoReturn, Protocol, TypedDict, cast
 from urllib.parse import urlparse
 
 from itemadapter import ItemAdapter
-from twisted.internet.defer import Deferred, maybeDeferred
-from twisted.internet.threads import deferToThread
 
 from scrapy.exceptions import IgnoreRequest, NotConfigured
 from scrapy.http import Request, Response
@@ -30,6 +30,7 @@ from scrapy.http.request import NO_CALLBACK
 from scrapy.pipelines.media import FileInfo, FileInfoOrError, MediaPipeline
 from scrapy.utils.boto import is_botocore_available
 from scrapy.utils.datatypes import CaseInsensitiveDict
+from scrapy.utils.defer import Failure, ensure_awaitable
 from scrapy.utils.ftp import ftp_store_file
 from scrapy.utils.log import failure_to_exc_info
 from scrapy.utils.python import to_bytes
@@ -38,8 +39,6 @@ from scrapy.utils.request import referer_str
 if TYPE_CHECKING:
     from collections.abc import Callable
     from os import PathLike
-
-    from twisted.python.failure import Failure
 
     # typing.Self requires Python 3.11
     from typing_extensions import Self
@@ -50,6 +49,9 @@ if TYPE_CHECKING:
 
 
 logger = logging.getLogger(__name__)
+
+# Thread pool executor for blocking I/O operations (S3, GCS, FTP)
+_executor = ThreadPoolExecutor(max_workers=10)
 
 
 def _to_string(path: str | PathLike[str]) -> str:
@@ -92,11 +94,11 @@ class FilesStoreProtocol(Protocol):
         info: MediaPipeline.SpiderInfo,
         meta: dict[str, Any] | None = None,
         headers: dict[str, str] | None = None,
-    ) -> Deferred[Any] | None: ...
+    ) -> asyncio.Future[Any] | None: ...
 
     def stat_file(
         self, path: str, info: MediaPipeline.SpiderInfo
-    ) -> StatInfo | Deferred[StatInfo]: ...
+    ) -> StatInfo | asyncio.Future[StatInfo]: ...
 
 
 class FSFilesStore:
@@ -186,23 +188,30 @@ class S3FilesStore:
 
     def stat_file(
         self, path: str, info: MediaPipeline.SpiderInfo
-    ) -> Deferred[StatInfo]:
+    ) -> asyncio.Future[StatInfo]:
         def _onsuccess(boto_key: dict[str, Any]) -> StatInfo:
             checksum = boto_key["ETag"].strip('"')
             last_modified = boto_key["LastModified"]
             modified_stamp = time.mktime(last_modified.timetuple())
             return {"checksum": checksum, "last_modified": modified_stamp}
 
-        return self._get_boto_key(path).addCallback(_onsuccess)
+        async def _get_and_process() -> StatInfo:
+            boto_key = await self._get_boto_key(path)
+            return _onsuccess(boto_key)
+        
+        return asyncio.ensure_future(_get_and_process())
 
-    def _get_boto_key(self, path: str) -> Deferred[dict[str, Any]]:
+    def _get_boto_key(self, path: str) -> asyncio.Future[dict[str, Any]]:
         key_name = f"{self.prefix}{path}"
+        loop = asyncio.get_event_loop()
         return cast(
-            "Deferred[dict[str, Any]]",
-            deferToThread(
-                self.s3_client.head_object,  # type: ignore[attr-defined]
-                Bucket=self.bucket,
-                Key=key_name,
+            "asyncio.Future[dict[str, Any]]",
+            loop.run_in_executor(
+                _executor,
+                lambda: self.s3_client.head_object(  # type: ignore[attr-defined]
+                    Bucket=self.bucket,
+                    Key=key_name,
+                ),
             ),
         )
 
@@ -213,21 +222,24 @@ class S3FilesStore:
         info: MediaPipeline.SpiderInfo,
         meta: dict[str, Any] | None = None,
         headers: dict[str, str] | None = None,
-    ) -> Deferred[Any]:
+    ) -> asyncio.Future[Any]:
         """Upload file to S3 storage"""
         key_name = f"{self.prefix}{path}"
         buf.seek(0)
         extra = self._headers_to_botocore_kwargs(self.HEADERS)
         if headers:
             extra.update(self._headers_to_botocore_kwargs(headers))
-        return deferToThread(
-            self.s3_client.put_object,  # type: ignore[attr-defined]
-            Bucket=self.bucket,
-            Key=key_name,
-            Body=buf,
-            Metadata={k: str(v) for k, v in (meta or {}).items()},
-            ACL=self.POLICY,
-            **extra,
+        loop = asyncio.get_event_loop()
+        return loop.run_in_executor(
+            _executor,
+            lambda: self.s3_client.put_object(  # type: ignore[attr-defined]
+                Bucket=self.bucket,
+                Key=key_name,
+                Body=buf,
+                Metadata={k: str(v) for k, v in (meta or {}).items()},
+                ACL=self.POLICY,
+                **extra,
+            ),
         )
 
     def _headers_to_botocore_kwargs(self, headers: dict[str, Any]) -> dict[str, Any]:
@@ -305,19 +317,18 @@ class GCSFilesStore:
 
     def stat_file(
         self, path: str, info: MediaPipeline.SpiderInfo
-    ) -> Deferred[StatInfo]:
-        def _onsuccess(blob) -> StatInfo:
+    ) -> asyncio.Future[StatInfo]:
+        def _get_and_process() -> StatInfo:
+            blob_path = self._get_blob_path(path)
+            blob = self.bucket.get_blob(blob_path)
             if blob:
                 checksum = base64.b64decode(blob.md5_hash).hex()
                 last_modified = time.mktime(blob.updated.timetuple())
                 return {"checksum": checksum, "last_modified": last_modified}
             return {}
 
-        blob_path = self._get_blob_path(path)
-        return cast(
-            "Deferred[StatInfo]",
-            deferToThread(self.bucket.get_blob, blob_path).addCallback(_onsuccess),
-        )
+        loop = asyncio.get_event_loop()
+        return loop.run_in_executor(_executor, _get_and_process)
 
     def _get_content_type(self, headers: dict[str, str] | None) -> str:
         if headers and "Content-Type" in headers:
@@ -334,16 +345,19 @@ class GCSFilesStore:
         info: MediaPipeline.SpiderInfo,
         meta: dict[str, Any] | None = None,
         headers: dict[str, str] | None = None,
-    ) -> Deferred[Any]:
+    ) -> asyncio.Future[Any]:
         blob_path = self._get_blob_path(path)
         blob = self.bucket.blob(blob_path)
         blob.cache_control = self.CACHE_CONTROL
         blob.metadata = {k: str(v) for k, v in (meta or {}).items()}
-        return deferToThread(
-            blob.upload_from_string,
-            data=buf.getvalue(),
-            content_type=self._get_content_type(headers),
-            predefined_acl=self.POLICY,
+        loop = asyncio.get_event_loop()
+        return loop.run_in_executor(
+            _executor,
+            lambda: blob.upload_from_string(
+                data=buf.getvalue(),
+                content_type=self._get_content_type(headers),
+                predefined_acl=self.POLICY,
+            ),
         )
 
 
@@ -374,22 +388,25 @@ class FTPFilesStore:
         info: MediaPipeline.SpiderInfo,
         meta: dict[str, Any] | None = None,
         headers: dict[str, str] | None = None,
-    ) -> Deferred[Any]:
+    ) -> asyncio.Future[Any]:
         path = f"{self.basedir}/{path}"
-        return deferToThread(
-            ftp_store_file,
-            path=path,
-            file=buf,
-            host=self.host,
-            port=self.port,
-            username=self.username,
-            password=self.password,
-            use_active_mode=self.USE_ACTIVE_MODE,
+        loop = asyncio.get_event_loop()
+        return loop.run_in_executor(
+            _executor,
+            lambda: ftp_store_file(
+                path=path,
+                file=buf,
+                host=self.host,
+                port=self.port,
+                username=self.username,
+                password=self.password,
+                use_active_mode=self.USE_ACTIVE_MODE,
+            ),
         )
 
     def stat_file(
         self, path: str, info: MediaPipeline.SpiderInfo
-    ) -> Deferred[StatInfo]:
+    ) -> asyncio.Future[StatInfo]:
         def _stat_file(path: str) -> StatInfo:
             try:
                 ftp = FTP()
@@ -406,7 +423,8 @@ class FTPFilesStore:
             except Exception:
                 return {}
 
-        return cast("Deferred[StatInfo]", deferToThread(_stat_file, path))
+        loop = asyncio.get_event_loop()
+        return loop.run_in_executor(_executor, _stat_file, path)
 
 
 class FilesPipeline(MediaPipeline):
@@ -520,8 +538,11 @@ class FilesPipeline(MediaPipeline):
 
     def media_to_download(
         self, request: Request, info: MediaPipeline.SpiderInfo, *, item: Any = None
-    ) -> Deferred[FileInfo | None] | None:
-        def _onsuccess(result: StatInfo) -> FileInfo | None:
+    ) -> asyncio.Future[FileInfo | None] | None:
+        async def _check_and_return() -> FileInfo | None:
+            path = self.file_path(request, info=info, item=item)
+            result: StatInfo = await ensure_awaitable(self.store.stat_file(path, info))
+            
             if not result:
                 return None  # returning None force download
 
@@ -550,20 +571,20 @@ class FilesPipeline(MediaPipeline):
                 "checksum": checksum,
                 "status": "uptodate",
             }
-
-        path = self.file_path(request, info=info, item=item)
-        # maybeDeferred() overloads don't seem to support a Union[_T, Deferred[_T]] return type
-        dfd: Deferred[StatInfo] = maybeDeferred(self.store.stat_file, path, info)  # type: ignore[call-overload]
-        dfd2: Deferred[FileInfo | None] = dfd.addCallback(_onsuccess)
-        dfd2.addErrback(lambda _: None)
-        dfd2.addErrback(
-            lambda f: logger.error(
+        
+        future = asyncio.ensure_future(_check_and_return())
+        
+        def _handle_error(exc: BaseException) -> None:
+            logger.error(
                 self.__class__.__name__ + ".store.stat_file",
-                exc_info=failure_to_exc_info(f),
+                exc_info=(type(exc), exc, exc.__traceback__),
                 extra={"spider": info.spider},
             )
+        
+        future.add_done_callback(
+            lambda f: _handle_error(f.exception()) if f.exception() else None
         )
-        return dfd2
+        return future
 
     def media_failed(
         self, failure: Failure, request: Request, info: MediaPipeline.SpiderInfo

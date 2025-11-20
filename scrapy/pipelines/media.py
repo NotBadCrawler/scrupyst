@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import functools
 import logging
 import warnings
@@ -7,22 +8,18 @@ from abc import ABC, abstractmethod
 from collections import defaultdict
 from typing import TYPE_CHECKING, Any, Literal, TypeAlias, TypedDict, cast
 
-from twisted import version as twisted_version
-from twisted.internet.defer import (
-    Deferred,
-    DeferredList,
-    inlineCallbacks,
-    maybeDeferred,
-)
-from twisted.python.failure import Failure
-from twisted.python.versions import Version
-
 from scrapy.exceptions import ScrapyDeprecationWarning
 from scrapy.http.request import NO_CALLBACK, Request
 from scrapy.utils.asyncio import call_later
 from scrapy.utils.datatypes import SequenceExclude
 from scrapy.utils.decorators import _warn_spider_arg
-from scrapy.utils.defer import _DEFER_DELAY, _defer_sleep, deferred_from_coro
+from scrapy.utils.defer import (
+    _DEFER_DELAY,
+    _defer_sleep,
+    Failure,
+    deferred_from_coro,
+    ensure_awaitable,
+)
 from scrapy.utils.log import failure_to_exc_info
 from scrapy.utils.misc import arg_to_iter
 from scrapy.utils.python import global_object_name
@@ -62,8 +59,8 @@ class MediaPipeline(ABC):
             self.spider: Spider = spider
             self.downloading: set[bytes] = set()
             self.downloaded: dict[bytes, FileInfo | Failure] = {}
-            self.waiting: defaultdict[bytes, list[Deferred[FileInfo]]] = defaultdict(
-                list
+            self.waiting: defaultdict[bytes, list[asyncio.Future[FileInfo]]] = (
+                defaultdict(list)
             )
 
     def __init__(
@@ -121,19 +118,26 @@ class MediaPipeline(ABC):
     @_warn_spider_arg
     def process_item(
         self, item: Any, spider: Spider | None = None
-    ) -> Deferred[list[FileInfoOrError]]:
+    ) -> asyncio.Future[Any]:
         info = self.spiderinfo
         requests = arg_to_iter(self.get_media_requests(item, info))
-        dlist = [self._process_request(r, info, item) for r in requests]
-        dfd = cast(
-            "Deferred[list[FileInfoOrError]]", DeferredList(dlist, consumeErrors=True)
-        )
-        return dfd.addCallback(self.item_completed, item, info)
+        tasks = [self._process_request(r, info, item) for r in requests]
+        
+        async def _gather_and_complete() -> Any:
+            results: list[FileInfoOrError] = []
+            for task in tasks:
+                try:
+                    result = await task
+                    results.append((True, result))
+                except Exception as e:
+                    results.append((False, Failure(e)))
+            return self.item_completed(results, item, info)
+        
+        return asyncio.ensure_future(_gather_and_complete())
 
-    @inlineCallbacks
-    def _process_request(
+    async def _process_request(
         self, request: Request, info: SpiderInfo, item: Any
-    ) -> Generator[Deferred[Any], Any, FileInfo]:
+    ) -> FileInfo:
         fp = self._fingerprinter.fingerprint(request)
 
         eb = request.errback
@@ -142,7 +146,7 @@ class MediaPipeline(ABC):
 
         # Return cached result if request was already seen
         if fp in info.downloaded:
-            yield _defer_sleep()
+            await _defer_sleep()
             cached_result = info.downloaded[fp]
             if isinstance(cached_result, Failure):
                 if eb:
@@ -151,34 +155,38 @@ class MediaPipeline(ABC):
             return cached_result
 
         # Otherwise, wait for result
-        wad: Deferred[FileInfo] = Deferred()
+        wad: asyncio.Future[FileInfo] = asyncio.Future()
         if eb:
-            wad.addErrback(eb)
+            # Add errback via callback that checks for exception
+            def _handle_done(future: asyncio.Future[FileInfo]) -> None:
+                if future.exception():
+                    eb(Failure(future.exception()))
+            wad.add_done_callback(_handle_done)
         info.waiting[fp].append(wad)
 
         # Check if request is downloading right now to avoid doing it twice
         if fp in info.downloading:
-            return (yield wad)
+            return await wad
 
         # Download request checking media_to_download hook output first
         info.downloading.add(fp)
-        yield _defer_sleep()
+        await _defer_sleep()
         result: FileInfo | Failure
         try:
-            file_info = yield maybeDeferred(
-                self.media_to_download, request, info, item=item
+            file_info = await ensure_awaitable(
+                self.media_to_download(request, info, item=item)
             )
             if file_info:
                 # got a result without downloading
                 result = file_info
             else:
                 # download the result
-                result = yield self._check_media_to_download(request, info, item=item)
-        except Exception:
-            result = Failure()
+                result = await self._check_media_to_download(request, info, item=item)
+        except Exception as e:
+            result = Failure(e)
             logger.exception(result)
         self._cache_result_and_execute_waiters(result, fp, info)
-        return (yield wad)  # it must return wad at last
+        return await wad  # it must return wad at last
 
     def _modify_media_request(self, request: Request) -> None:
         if self.handle_httpstatus_list:
@@ -186,18 +194,17 @@ class MediaPipeline(ABC):
         else:
             request.meta["handle_httpstatus_all"] = True
 
-    @inlineCallbacks
-    def _check_media_to_download(  # pylint: disable=inconsistent-return-statements
+    async def _check_media_to_download(
         self, request: Request, info: SpiderInfo, item: Any
-    ) -> Generator[Deferred[Any], Any, FileInfo]:
+    ) -> FileInfo:
         try:
             if self.download_func:
                 # this ugly code was left only to support tests. TODO: remove
-                response = yield maybeDeferred(self.download_func, request, info.spider)
+                response = await ensure_awaitable(self.download_func(request, info.spider))
             else:
                 self._modify_media_request(request)
                 assert self.crawler.engine
-                response = yield deferred_from_coro(
+                response = await deferred_from_coro(
                     self.crawler.engine.download_async(request)
                 )
             return self.media_downloaded(response, request, info, item=item)
@@ -219,8 +226,6 @@ class MediaPipeline(ABC):
             # minimize cached information for failure
             result.cleanFailure()
             result.frames = []
-            if twisted_version < Version("twisted", 24, 10, 0):
-                result.stack = []  # type: ignore[method-assign]
             # This code fixes a memory leak by avoiding to keep references to
             # the Request and Response objects on the Media Pipeline cache.
             #
@@ -247,15 +252,15 @@ class MediaPipeline(ABC):
         info.downloaded[fp] = result  # cache result
         for wad in info.waiting.pop(fp):
             if isinstance(result, Failure):
-                call_later(_DEFER_DELAY, wad.errback, result)
+                call_later(_DEFER_DELAY, wad.set_exception, result.value)
             else:
-                call_later(_DEFER_DELAY, wad.callback, result)
+                call_later(_DEFER_DELAY, wad.set_result, result)
 
     # Overridable Interface
     @abstractmethod
     def media_to_download(
         self, request: Request, info: SpiderInfo, *, item: Any = None
-    ) -> Deferred[FileInfo | None] | None:
+    ) -> asyncio.Future[FileInfo | None] | FileInfo | None:
         """Check request before starting download"""
         raise NotImplementedError
 
