@@ -1,3 +1,5 @@
+import pytest
+
 from scrapy.utils.asyncgen import as_async_generator, collect_asyncgen
 # Removed deferred_f_from_coro_f import
 

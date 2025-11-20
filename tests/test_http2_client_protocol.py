@@ -35,6 +35,9 @@ except ImportError:
     HAS_TWISTED = False
     H2_ENABLED = False
     async_yield_fixture = pytest.fixture  # Stub when Twisted not available
+    # Stub decorator to prevent collection errors
+    def inlineCallbacks(f):
+        return f
 
 pytestmark = pytest.mark.skipif(
     not HAS_TWISTED or not H2_ENABLED,
