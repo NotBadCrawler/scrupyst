@@ -240,7 +240,7 @@
    - 在 tests/utils/__init__.py 中将 `twisted_sleep()` 替换为 `asyncio_sleep()`
    - 从测试工具中删除所有 Twisted Deferred 和 reactor 导入
 
-4. ✅ 迁移 32 个测试文件（32/200+）- **新增：12 个额外文件已迁移！**
+4. ✅ 迁移 33 个测试文件（33/200+）- **新增：13 个额外文件已迁移！**
    
    **之前迁移的（20 个文件）：**
    - `test_dependencies.py` - 删除 Twisted 版本检查
@@ -251,7 +251,7 @@
    - `tests/spiders.py` - 工具文件，替换 defer.succeed
    - `test_logformatter.py` - 2 个异步测试 + Failure 迁移
    - `test_downloaderslotssettings.py` - 1 个异步测试
-   - `test_downloadermiddleware_retry.py` - 条件 Twisted 导入
+   - `test_downloadermiddleware_retry.py` - 条件 Twisted 导入（已验证兼容）
    - `test_extension_telnet.py` - 标记为已弃用
    - `test_request_left.py` - 4 个异步测试
    - `test_signals.py` - 2 个异步测试
@@ -275,7 +275,7 @@
    - ✅ `test_spider.py` - 删除 @inlineCallbacks（2 个测试）
    - ✅ `test_spidermiddleware.py` - 将 Deferred 替换为 asyncio.Future
    
-   **批次 2 - 当前会话（3 个文件）：**
+   **批次 2 - 当前会话（4 个文件）：**
    - ✅ `test_downloadermiddleware.py`（14 个测试）- **完全迁移且全部通过！**
      - 将 `twisted.internet.defer.succeed` 替换为 `asyncio.Future().set_result()`
      - 将 `twisted.internet.defer.Deferred` 替换为 `asyncio.Future`
@@ -284,6 +284,12 @@
      - 重命名测试类以提高清晰度（DeferredMiddleware → FutureMiddleware）
    - ✅ `tests/__init__.py` - 删除 TWISTED_KEEPS_TRACEBACKS 和 Twisted 版本导入
    - ✅ `test_cmdline_crawl_with_pipeline/__init__.py` - 更新 asyncio 的回溯格式检查
+   - ✅ `test_spidermiddleware_process_start.py`（23 个测试）- **完全迁移且全部通过！**
+     - 将 `@deferred_f_from_coro_f` 替换为 `@pytest.mark.asyncio`
+     - 将 `twisted_sleep` 替换为 `asyncio_sleep`
+     - 更新 `crawler.crawl()` 为 `crawler.crawl_async()`
+     - 在测试设置中禁用已弃用的 TELNETCONSOLE 扩展
+     - 所有 async/await 模式正常工作
    - 🔄 `test_engine.py` - **进行中**（装饰器已迁移，需要调试）
      - 将所有 `@deferred_f_from_coro_f` 替换为 `@pytest.mark.asyncio`
      - 将 `@inlineCallbacks` 函数转换为 `async/await`
@@ -376,8 +382,8 @@
    - 更新测试断言和期望
    - 验证所有测试通过
 
-**预估完成：** 1-2 周的专注工作（55% 完成）
-**当前进度：** ~55%（基础架构 + 所有 mock 服务器 + 29 个测试文件已迁移）
+**预估完成：** 1-2 周的专注工作（56% 完成）
+**当前进度：** ~56%（基础架构 + 所有 mock 服务器 + 33 个测试文件已迁移）
 **下一个优先级：** 继续将剩余的测试文件迁移到 pytest-asyncio
 
 ### 第六阶段：文档（0% 完成）🚫
