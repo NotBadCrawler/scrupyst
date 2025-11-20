@@ -1,13 +1,11 @@
 ---
-name: Question / Help
-about: Ask a question about Scrapy or ask for help with your Scrapy code.
+name: 问题 / 帮助
+about: 询问关于 Scrapy 的问题或寻求 Scrapy 代码帮助。
 ---
 
-Thanks for taking an interest in Scrapy!
+感谢您对 Scrapy 的关注！
 
-The Scrapy GitHub issue tracker is not meant for questions or help. Please ask
-for help in the [Scrapy community resources](https://scrapy.org/community/)
-instead.
+Scrapy GitHub 问题跟踪器不适用于问题或帮助。请在
+[Scrapy 社区资源](https://scrapy.org/community/)寻求帮助。
 
-The GitHub issue tracker's purpose is to deal with bug reports and feature
-requests for the project itself.
+GitHub 问题跟踪器的目的是处理项目本身的错误报告和功能请求。

@@ -1,12 +1,12 @@
-# Security Policy
+# 安全政策
 
-## Supported Versions
+## 支持的版本
 
-| Version | Supported          |
+| 版本 | 支持情况          |
 | ------- | ------------------ |
 | 2.13.x     | :white_check_mark: |
 | < 2.13.x   | :x:                |
 
-## Reporting a Vulnerability
+## 报告漏洞
 
-Please report the vulnerability using https://github.com/scrapy/scrapy/security/advisories/new.
+请使用 https://github.com/scrapy/scrapy/security/advisories/new 报告漏洞。
