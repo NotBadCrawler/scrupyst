@@ -206,9 +206,14 @@ async def compress_handler(request: web.Request) -> web.Response:
 
 
 async def set_cookie_handler(request: web.Request) -> web.Response:
-    """Set cookies in response."""
+    """Set cookies in response.
+    
+    Note: This is a test mock server. Cookies intentionally lack Secure/HttpOnly
+    attributes to allow testing various cookie scenarios including insecure cookies.
+    """
     response = web.Response(body=b"Cookie set")
-    response.set_cookie("test_cookie", "cookie_value")
+    # nosemgrep: python.flask.security.insecure-cookie.insecure-cookie
+    response.set_cookie("test_cookie", "cookie_value")  # noqa: S102
     return response
 
 
