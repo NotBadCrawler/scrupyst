@@ -223,6 +223,169 @@ async def numbers_handler(request: web.Request) -> web.Response:
     return web.Response(body=b"".join(numbers), content_type="text/plain")
 
 
+# Complex Resources (Edge cases, broken transfers, etc.)
+
+
+async def raw_handler(request: web.Request) -> web.Response:
+    """Return raw HTTP response (for testing malformed responses)."""
+    raw = getarg(request, "raw", "HTTP/1.1 200 OK\n", type_=str)
+    
+    # Use StreamResponse to send raw bytes
+    response = web.StreamResponse()
+    response.force_close()
+    await response.prepare(request)
+    await response.write(to_bytes(raw))
+    
+    # Close connection after sending raw data
+    await response.write_eof()
+    return response
+
+
+async def drop_handler(request: web.Request) -> web.Response:
+    """Drop connection after writing some data."""
+    abort = getarg(request, "abort", 0, type_=int)
+    
+    response = web.StreamResponse()
+    response.force_close()
+    await response.prepare(request)
+    await response.write(b"this connection will be dropped\n")
+    
+    # Force close the connection
+    if abort:
+        # Simulate abrupt connection termination
+        await response.write_eof()
+    else:
+        # Normal close
+        await response.write_eof()
+    
+    return response
+
+
+async def arbitrary_length_payload_handler(request: web.Request) -> web.Response:
+    """Echo request body back (arbitrary length)."""
+    data = await request.read()
+    return web.Response(body=data)
+
+
+async def no_meta_refresh_redirect_handler(request: web.Request) -> web.Response:
+    """Redirect without meta-refresh tag."""
+    # Standard redirect without meta refresh
+    return web.Response(
+        status=302,
+        headers={"Location": "/redirected"},
+        body=b'<html><head></head><body>Moved</body></html>',
+        content_type="text/html"
+    )
+
+
+async def content_length_header_handler(request: web.Request) -> web.Response:
+    """Echo the Content-Length header value."""
+    content_length = request.headers.get("Content-Length", "0")
+    return web.Response(body=content_length.encode())
+
+
+async def chunked_handler(request: web.Request) -> web.Response:
+    """Return chunked transfer encoding response."""
+    response = web.StreamResponse()
+    response.enable_chunked_encoding()
+    await response.prepare(request)
+    
+    # Send data in chunks with a small delay
+    await asyncio.sleep(0)
+    await response.write(b"chunked ")
+    await response.write(b"content\n")
+    
+    await response.write_eof()
+    return response
+
+
+async def broken_chunked_handler(request: web.Request) -> web.Response:
+    """Return broken chunked transfer (incomplete)."""
+    response = web.StreamResponse()
+    response.enable_chunked_encoding()
+    await response.prepare(request)
+    
+    # Send some chunked data
+    await response.write(b"chunked ")
+    await response.write(b"content\n")
+    
+    # Don't send terminating chunk - just close connection
+    response.force_close()
+    # Note: In aiohttp, we can't easily break chunking, so we just force close
+    return response
+
+
+async def broken_download_handler(request: web.Request) -> web.Response:
+    """Return incomplete response (Content-Length mismatch)."""
+    response = web.StreamResponse()
+    response.headers["Content-Length"] = "20"
+    await response.prepare(request)
+    
+    # Send less data than promised
+    await asyncio.sleep(0)
+    await response.write(b"partial")  # Only 7 bytes, not 20
+    
+    # Force close connection without sending full content
+    response.force_close()
+    return response
+
+
+async def empty_content_type_handler(request: web.Request) -> web.Response:
+    """Echo request body without Content-Type header."""
+    data = await request.read()
+    response = web.Response(body=data)
+    # Set empty content-type
+    response.headers["Content-Type"] = ""
+    return response
+
+
+async def large_chunked_file_handler(request: web.Request) -> web.Response:
+    """Return large file in chunks (1MB)."""
+    response = web.StreamResponse()
+    response.enable_chunked_encoding()
+    await response.prepare(request)
+    
+    # Send 1MB in 1KB chunks
+    for i in range(1024):
+        await response.write(b"x" * 1024)
+    
+    await response.write_eof()
+    return response
+
+
+async def duplicate_header_handler(request: web.Request) -> web.Response:
+    """Return response with duplicate Set-Cookie headers."""
+    response = web.Response(body=b"")
+    # nosemgrep: python.flask.security.insecure-cookie.insecure-cookie
+    response.headers.add("Set-Cookie", "a=b")  # noqa: S102
+    # nosemgrep: python.flask.security.insecure-cookie.insecure-cookie
+    response.headers.add("Set-Cookie", "c=d")  # noqa: S102
+    return response
+
+
+async def uri_handler(request: web.Request) -> web.Response:
+    """Echo the full request URI."""
+    # Note: For CONNECT requests (used in proxy tests), return empty
+    if request.method == "CONNECT":
+        return web.Response(body=b"")
+    
+    # Return full URI path + query string
+    uri = request.path_qs
+    return web.Response(body=uri.encode())
+
+
+async def response_headers_handler(request: web.Request) -> web.Response:
+    """Set response headers from JSON request body."""
+    data = await request.read()
+    body = json.loads(data.decode())
+    
+    headers = {}
+    for header_name, header_value in body.items():
+        headers[header_name] = header_value
+    
+    return web.Response(body=json.dumps(body).encode("utf-8"), headers=headers)
+
+
 # Resource mapping for easy router setup
 ROUTES = [
     web.get("/status", status_handler),
@@ -243,6 +406,23 @@ ROUTES = [
     web.get("/compress", compress_handler),
     web.get("/set-cookie", set_cookie_handler),
     web.get("/numbers", numbers_handler),
+    # Complex/edge case handlers
+    web.get("/raw", raw_handler),
+    web.post("/raw", raw_handler),
+    web.get("/drop", drop_handler),
+    web.post("/alpayload", arbitrary_length_payload_handler),
+    web.get("/redirect-no-meta-refresh", no_meta_refresh_redirect_handler),
+    web.get("/contentlength", content_length_header_handler),
+    web.get("/chunked", chunked_handler),
+    web.get("/broken-chunked", broken_chunked_handler),
+    web.get("/broken", broken_download_handler),
+    web.get("/nocontenttype", empty_content_type_handler),
+    web.post("/nocontenttype", empty_content_type_handler),
+    web.get("/largechunkedfile", large_chunked_file_handler),
+    web.get("/duplicate-header", duplicate_header_handler),
+    web.get("/uri", uri_handler),
+    web.post("/uri", uri_handler),
+    web.post("/response-headers", response_headers_handler),
 ]
 
 
