@@ -5,7 +5,7 @@
 # For format details, see: https://gh.io/customagents/config
 
 name: 通用 AGENT
-description:
+description: 一些项目的规范
 ---
 
 ## [通用项目标准]
@@ -13,7 +13,7 @@ description:
 主要语言是简体中文 (除了文件名, 无论是生成指令、代码、注释还是 git 的评论和 PR, 都用简体中文生成内容);
 
 ### 依赖
-无论是依赖还是工具, 尽可能用最新版, 尽可能用非中国大陆的开发者或公司开发的;
+无论是依赖还是工具, 尽可能用最新版, 尽可能用非中国大陆的公司开发的;
 
 ## [Python 项目编码标准]
 ### 工具偏好
