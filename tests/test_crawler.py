@@ -727,7 +727,7 @@ class TestCrawlerRunnerHasSpider:
     @pytest.mark.asyncio
     async def test_crawler_runner_asyncio_enabled_true(
         self, reactor_pytest: str
-    ) -> Generator[Deferred[Any], Any, None]:
+    ) -> None:
         if reactor_pytest != "asyncio":
             runner = CrawlerRunner(
                 settings={
